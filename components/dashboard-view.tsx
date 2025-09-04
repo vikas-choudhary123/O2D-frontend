@@ -345,11 +345,10 @@ const calculateFilteredMetrics = () => {
 
       // Total Dispatch Today - count values in column T (index 19)
       // Total Dispatch Today - sum values in column AC (index 28) where column T (index 19) has a value
-if (row[19] && row[19].toString().trim() !== "") {
-  if (row[28] && !isNaN(parseFloat(row[28]))) {
-    metrics.totalDispatchToday += parseFloat(row[28]);
-  }
-}
+   // Total Dispatch Today - count values in column T (index 19)
+      if (row[19] && row[19].toString().trim() !== "") {
+        metrics.totalDispatchToday++
+      }
 
       // WB In - count values in column G (index 6)
       if (row[6] && row[6].toString().trim() !== "") {
@@ -1183,12 +1182,12 @@ const generateTop10Customers = () => {
 
  <Card className="w-full overflow-hidden">
   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
-    <CardTitle className="text-xs font-medium">Total Dispatch</CardTitle>
+    <CardTitle className="text-xs font-medium">Total Invoice</CardTitle>
   </CardHeader>
   <CardContent className="p-3 pt-0">
     <div className="text-lg font-bold text-blue-600">
-      {displayMetrics.totalDispatchToday.toFixed(2)}
-    </div>
+        {displayMetrics.totalDispatchToday}
+      </div>
     <p className="text-xs text-gray-600">{formatTodayDate()}</p>
   </CardContent>
 </Card>
