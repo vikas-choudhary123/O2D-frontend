@@ -344,9 +344,12 @@ const calculateFilteredMetrics = () => {
       }
 
       // Total Dispatch Today - count values in column T (index 19)
-      if (row[19] && row[19].toString().trim() !== "") {
-        metrics.totalDispatchToday++
-      }
+      // Total Dispatch Today - sum values in column AC (index 28) where column T (index 19) has a value
+if (row[19] && row[19].toString().trim() !== "") {
+  if (row[28] && !isNaN(parseFloat(row[28]))) {
+    metrics.totalDispatchToday += parseFloat(row[28]);
+  }
+}
 
       // WB In - count values in column G (index 6)
       if (row[6] && row[6].toString().trim() !== "") {
@@ -971,6 +974,42 @@ const generateTop10Customers = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {/* Salesperson Dropdown */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Salesperson</label>
+              <Select value={selectedSalesperson} onValueChange={setSelectedSalesperson}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select salesperson" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All Salespersons">All Salespersons</SelectItem>
+                  {data?.uniqueSalespersons?.map((salesperson) => (
+                    <SelectItem key={salesperson} value={salesperson}>
+                      {salesperson}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* State Dropdown */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">State</label>
+              <Select value={selectedState} onValueChange={setSelectedState}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select state" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All States">All States</SelectItem>
+                  {data?.uniqueStates?.map((state) => (
+                    <SelectItem key={state} value={state}>
+                      {state}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Party Name Dropdown */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Party Name</label>
@@ -988,6 +1027,23 @@ const generateTop10Customers = () => {
                 </SelectContent>
               </Select>
             </div>
+
+             <div className="space-y-2">
+  <label className="text-sm font-medium">Item</label>
+  <Select value={selectedItem} onValueChange={setSelectedItem}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select item" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="All Items">All Items</SelectItem>
+      {items.map((item) => (
+        <SelectItem key={item} value={item}>
+          {item}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
 
             {/* From Date */}
             <div className="space-y-2">
@@ -1027,57 +1083,6 @@ const generateTop10Customers = () => {
               </Popover>
             </div>
 
-            {/* State Dropdown */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">State</label>
-              <Select value={selectedState} onValueChange={setSelectedState}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select state" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All States">All States</SelectItem>
-                  {data?.uniqueStates?.map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {state}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Salesperson Dropdown */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Salesperson</label>
-              <Select value={selectedSalesperson} onValueChange={setSelectedSalesperson}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select salesperson" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All Salespersons">All Salespersons</SelectItem>
-                  {data?.uniqueSalespersons?.map((salesperson) => (
-                    <SelectItem key={salesperson} value={salesperson}>
-                      {salesperson}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-           <div className="space-y-2">
-  <label className="text-sm font-medium">Item</label>
-  <Select value={selectedItem} onValueChange={setSelectedItem}>
-    <SelectTrigger>
-      <SelectValue placeholder="Select item" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="All Items">All Items</SelectItem>
-      {items.map((item) => (
-        <SelectItem key={item} value={item}>
-          {item}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-</div>
           </div>
 
           {/* Active Filters Display */}
@@ -1176,17 +1181,17 @@ const generateTop10Customers = () => {
     </CardContent>
   </Card>
 
-  <Card className="w-full overflow-hidden">
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
-      <CardTitle className="text-xs font-medium">Total Dispatch</CardTitle>
-    </CardHeader>
-    <CardContent className="p-3 pt-0">
-      <div className="text-lg font-bold text-blue-600">
-        {displayMetrics.totalDispatchToday}
-      </div>
-      <p className="text-xs text-gray-600">{formatTodayDate()}</p>
-    </CardContent>
-  </Card>
+ <Card className="w-full overflow-hidden">
+  <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
+    <CardTitle className="text-xs font-medium">Total Dispatch</CardTitle>
+  </CardHeader>
+  <CardContent className="p-3 pt-0">
+    <div className="text-lg font-bold text-blue-600">
+      {displayMetrics.totalDispatchToday.toFixed(2)}
+    </div>
+    <p className="text-xs text-gray-600">{formatTodayDate()}</p>
+  </CardContent>
+</Card>
 
   <Card className="w-full overflow-hidden">
     <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
