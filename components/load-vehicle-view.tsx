@@ -97,6 +97,7 @@ for (let i = 0; i < firstRow.length; i++) {
           const supervisorNameData = row[12] || ""
           const remarksData = row[13] || ""
           const planned3 = formatDateTime(row[9]) || ""
+          const itemName = row[41] || ""
           
           // Only process rows that have at least some data
           if (orderNumber || gateEntryNumber || customerName || truckNumber) {
@@ -108,7 +109,9 @@ for (let i = 0; i < firstRow.length; i++) {
               wbSlipNo: wbSlipNo.toString(),
               supervisorName: supervisorNameData.toString(),
               remarks: remarksData.toString(),
+              itemName: itemName.toString(),
               planned3: planned3,
+
               rowIndex: i + 1 // Store actual row number for updates
             }
             
@@ -302,6 +305,7 @@ for (let i = 0; i < firstRow.length; i++) {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Planned</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                   </tr>
@@ -314,6 +318,7 @@ for (let i = 0; i < firstRow.length; i++) {
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateEntryNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.customerName}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.truckNumber}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.itemName}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.planned3}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
