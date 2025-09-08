@@ -125,3 +125,32 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media (max-width: 768px) {
+  .mobile-card-view {
+    display: block;
+  }
+  .mobile-card-view .table-header {
+    display: none;
+  }
+  .mobile-card-view .mobile-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: white;
+  }
+  .mobile-card-view .mobile-card-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+  .mobile-card-view .mobile-card-label {
+    font-weight: 600;
+    color: #374151;
+  }
+  .mobile-card-view .mobile-card-value {
+    color: #6b7280;
+    text-align: right;
+  }
+}

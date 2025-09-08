@@ -9,6 +9,31 @@ export function OrdersView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState("pending")
+  const [showModal, setShowModal] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [formData, setFormData] = useState({
+    arrangeLogistic: '',
+    qty: '',
+    remarks: ''
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [historyData, setHistoryData] = useState([])
+  const [filteredHistory, setFilteredHistory] = useState([])
+   const [filters, setFilters] = useState({
+    status: 'all',
+    salesperson: '',
+    customer: '',
+    item: '',
+    search: ''
+  })
+  // Add new state for filter options
+  const [filterOptions, setFilterOptions] = useState({
+    salespersons: [],
+    customers: [],
+    items: []
+  })
+  
 
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuC7Cy9GMEziCJi2wbP7S27ERl-_ZhpssLwFZ8_IUgf_Z6oJla8lV45VyX47vFIWg7/exec"
 
@@ -60,6 +85,17 @@ export function OrdersView() {
         status: row[statusIndex] || ''
       }))
 
+      // Extract unique values for filters
+      const salespersons = [...new Set(processedOrders.map(order => order.salesperson).filter(Boolean))].sort()
+      const customers = [...new Set(processedOrders.map(order => order.customerName).filter(Boolean))].sort()
+      const items = [...new Set(processedOrders.map(order => order.itemName).filter(Boolean))].sort()
+      
+      setFilterOptions({
+        salespersons,
+        customers,
+        items
+      })
+
       // Categorize orders by status
       const pending = processedOrders.filter(order => 
         order.status.toLowerCase().includes('pending') || order.status.toLowerCase().includes('open')
@@ -87,11 +123,223 @@ export function OrdersView() {
     }
   }
 
+   const filterOrders = (orders) => {
+    return orders.filter(order => {
+      // Filter by salesperson
+      if (filters.salesperson && order.salesperson !== filters.salesperson) {
+        return false
+      }
+      
+      // Filter by customer
+      if (filters.customer && order.customerName !== filters.customer) {
+        return false
+      }
+      
+      // Filter by item
+      if (filters.item && order.itemName !== filters.item) {
+        return false
+      }
+      
+      // Filter by search term
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase()
+        const matchesSearch = 
+          order.vrno.toLowerCase().includes(searchTerm) ||
+          order.customerName.toLowerCase().includes(searchTerm) ||
+          order.itemName.toLowerCase().includes(searchTerm) ||
+          order.remarks.toLowerCase().includes(searchTerm)
+        
+        if (!matchesSearch) return false
+      }
+      
+      return true
+    })
+  }
+
+  const fetchHistoryData = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=Order-Flw-Up&action=fetch`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch history data')
+      }
+
+      const data = result.data
+      if (!data || data.length === 0) {
+        setHistoryData([])
+        setFilteredHistory([])
+        return
+      }
+
+      // Assuming first row contains headers
+      const headers = data[0]
+      const rows = data.slice(1)
+
+      // Find column indices
+      const timestampIndex = headers.findIndex(h => h.toLowerCase().includes('timestamp'))
+      const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
+      const arrangeLogisticIndex = headers.findIndex(h => h.toLowerCase().includes('arrange logistic'))
+      const qtyIndex = headers.findIndex(h => h.toLowerCase().includes('qty'))
+      const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('remarks'))
+
+      // Process rows into history objects
+      const processedHistory = rows.map((row, index) => ({
+        id: index + 1,
+        timestamp: row[timestampIndex] || '',
+        vrno: row[vrnoIndex] || '',
+        arrangeLogistic: row[arrangeLogisticIndex] || '',
+        qty: row[qtyIndex] || '',
+        remarks: row[remarksIndex] || ''
+      }))
+
+      setHistoryData(processedHistory)
+      setFilteredHistory(processedHistory)
+      
+    } catch (err) {
+      console.error('Error fetching history data:', err)
+      alert('Error fetching history data: ' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleProcessOrder = (order) => {
+    setSelectedOrder(order)
+    setFormData({
+      arrangeLogistic: '',
+      qty: '',
+      remarks: ''
+    })
+    setShowModal(true)
+  }
+
+  const handleFormSubmit = async () => {
+    // Validation
+    if (!formData.arrangeLogistic) {
+      alert('Please select Arrange Logistic option')
+      return
+    }
+
+    if (formData.arrangeLogistic === 'Yes' && !formData.qty) {
+      alert('Please enter quantity')
+      return
+    }
+
+    if (formData.arrangeLogistic === 'No' && !formData.remarks) {
+      alert('Please enter remarks')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      const timestamp = new Date().toLocaleString()
+      
+      // Prepare row data array matching the Order-Flw-Up sheet columns
+      const rowData = [
+        timestamp,
+        selectedOrder.vrno,
+        formData.arrangeLogistic,
+        formData.arrangeLogistic === 'Yes' ? formData.qty : '',
+        formData.arrangeLogistic === 'No' ? formData.remarks : ''
+      ]
+
+      // Create form data to match your existing Apps Script
+      const formData2 = new FormData()
+      formData2.append('sheetName', 'Order-Flw-Up')
+      formData2.append('action', 'insert')
+      formData2.append('rowData', JSON.stringify(rowData))
+
+      const response = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        body: formData2
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        alert('Order processed successfully!')
+        setShowModal(false)
+        setSelectedOrder(null)
+        setFormData({
+          arrangeLogistic: '',
+          qty: '',
+          remarks: ''
+        })
+        // Refresh data
+        fetchOrderData()
+      } else {
+        throw new Error(result.error || 'Failed to submit data')
+      }
+    } catch (err) {
+      console.error('Error submitting form:', err)
+      alert('Error submitting form: ' + err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleFormChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+      // Reset dependent fields when arrangeLogistic changes
+      ...(field === 'arrangeLogistic' ? { qty: '', remarks: '' } : {})
+    }))
+  }
+
+  const handleOpenHistory = () => {
+    setShowHistoryModal(true)
+    fetchHistoryData()
+  }
+
+  const handleFilterChange = (field, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const applyFilters = () => {
+    let filtered = [...historyData]
+    
+    // Apply status filter
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(item => {
+        if (filters.status === 'arranged') {
+          return item.arrangeLogistic === 'Yes'
+        } else if (filters.status === 'not_arranged') {
+          return item.arrangeLogistic === 'No'
+        }
+        return true
+      })
+    }
+    
+    // Apply search filter
+    if (filters.search) {
+      const searchTerm = filters.search.toLowerCase()
+      filtered = filtered.filter(item => 
+        item.vrno.toLowerCase().includes(searchTerm) ||
+        item.remarks.toLowerCase().includes(searchTerm)
+      )
+    }
+    
+    setFilteredHistory(filtered)
+  }
+
   useEffect(() => {
     fetchOrderData()
   }, [])
 
-  if (loading) {
+  useEffect(() => {
+    if (showHistoryModal) {
+      applyFilters()
+    }
+  }, [filters, historyData, showHistoryModal])
+
+  if (loading && !showHistoryModal) {
     return (
       <div className="space-y-6">
         <div>
@@ -141,9 +389,90 @@ export function OrdersView() {
         <h3 className="text-lg font-semibold capitalize">{type} Orders</h3>
         <p className="text-gray-600 text-sm">Orders with {type} status</p>
       </div>
-      <div className="overflow-x-auto">
+      
+      {/* Filters Section */}
+      <div className="p-4 bg-gray-50 border-b">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Salesperson Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
+            <select
+              value={filters.salesperson}
+              onChange={(e) => setFilters({...filters, salesperson: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Salespersons</option>
+              {filterOptions.salespersons.map((salesperson, index) => (
+                <option key={index} value={salesperson}>{salesperson}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Customer Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+            <select
+              value={filters.customer}
+              onChange={(e) => setFilters({...filters, customer: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Customers</option>
+              {filterOptions.customers.map((customer, index) => (
+                <option key={index} value={customer}>{customer}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Item Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
+            <select
+              value={filters.item}
+              onChange={(e) => setFilters({...filters, item: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Items</option>
+              {filterOptions.items.map((item, index) => (
+                <option key={index} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Search Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({...filters, search: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Search orders..."
+            />
+          </div>
+        </div>
+        
+        {/* Clear Filters Button */}
+        {(filters.salesperson || filters.customer || filters.item || filters.search) && (
+          <div className="mt-3">
+            <button
+              onClick={() => setFilters({
+                status: 'all',
+                salesperson: '',
+                customer: '',
+                item: '',
+                search: ''
+              })}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
+      
+      <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 border-b sticky top-0 z-10">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
@@ -155,11 +484,12 @@ export function OrdersView() {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {data.length > 0 ? (
-              data.map((order) => (
+            {filterOrders(data).length > 0 ? (
+              filterOrders(data).map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50">
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.salesperson}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.customerName}</td>
@@ -181,12 +511,20 @@ export function OrdersView() {
                       {order.status}
                     </span>
                   </td>
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => handleProcessOrder(order)}
+                      className="bg-blue-600 text-white px-3 py-1 text-xs rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Process
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="10" className="px-6 py-8 text-center text-gray-500">
-                  No {type} orders found
+                <td colSpan="11" className="px-6 py-8 text-center text-gray-500">
+                  No {type} orders found matching your filters
                 </td>
               </tr>
             )}
@@ -203,15 +541,27 @@ export function OrdersView() {
           <h2 className="text-3xl font-bold tracking-tight">Orders</h2>
           <p className="text-gray-600">Manage all orders from ImporterSheet</p>
         </div>
-        <button
-          onClick={fetchOrderData}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>Refresh</span>
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={handleOpenHistory}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center space-x-2 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span>History Flw-Up</span>
+          </button>
+          <button
+            onClick={fetchOrderData}
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -220,7 +570,7 @@ export function OrdersView() {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab("pending")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "pending"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -230,7 +580,7 @@ export function OrdersView() {
             </button>
             <button
               onClick={() => setActiveTab("partial")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "partial"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -240,7 +590,7 @@ export function OrdersView() {
             </button>
             <button
               onClick={() => setActiveTab("complete")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "complete"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -250,7 +600,7 @@ export function OrdersView() {
             </button>
             <button
               onClick={() => setActiveTab("cancel")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === "cancel"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -267,6 +617,213 @@ export function OrdersView() {
         {activeTab === "complete" && renderTable(completeOrders, "complete")}
         {activeTab === "cancel" && renderTable(cancelOrders, "cancel")}
       </div>
+
+      {/* Modal for Process Order Form */}
+      {showModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Process Order</h3>
+                  <p className="text-gray-600 text-sm mt-1">VR No: {selectedOrder.vrno}</p>
+                  <p className="text-gray-600 text-sm">Customer: {selectedOrder.customerName}</p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  disabled={submitting}
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Arrange Logistic <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.arrangeLogistic}
+                  onChange={(e) => handleFormChange('arrangeLogistic', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={submitting}
+                >
+                  <option value="">Select...</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+
+              {formData.arrangeLogistic === 'Yes' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.qty}
+                    onChange={(e) => handleFormChange('qty', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter quantity"
+                    min="1"
+                    disabled={submitting}
+                  />
+                </div>
+              )}
+
+              {formData.arrangeLogistic === 'No' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Remarks <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={formData.remarks}
+                    onChange={(e) => handleFormChange('remarks', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="3"
+                    placeholder="Enter remarks explaining why logistics cannot be arranged"
+                    disabled={submitting}
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFormSubmit}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Submitting...</span>
+                    </div>
+                  ) : (
+                    'Submit'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for History Follow-Up */}
+       {showHistoryModal && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">History Follow-Up</h3>
+                  <p className="text-gray-600 text-sm mt-1">Order-Flw-Up Sheet Data</p>
+                </div>
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Filters */}
+            <div className="p-4 border-b border-gray-200 bg-gray-50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="arranged">Logistics Arranged</option>
+                    <option value="not_arranged">Logistics Not Arranged</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Search by VR No or Remarks"
+                  />
+                </div>
+                
+                <div className="flex items-end">
+                  <button
+                    onClick={applyFilters}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* History Table */}
+            <div className="overflow-auto flex-grow" style={{ overflowY: 'auto' }}>
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VR No</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrange Logistic</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredHistory.length > 0 ? (
+                    filteredHistory.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.timestamp}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.vrno}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            item.arrangeLogistic === 'Yes' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {item.arrangeLogistic}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.qty}</td>
+                        <td className="px-4 py-4 text-sm text-gray-600">{item.remarks}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                        No history data found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

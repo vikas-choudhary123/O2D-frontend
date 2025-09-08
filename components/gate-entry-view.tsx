@@ -3,8 +3,11 @@ import { useState, useEffect } from 'react'
 
 export function GateEntryView() {
   const [gateEntryData, setGateEntryData] = useState([])
+  const [filteredData, setFilteredData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
 
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzl1EP1Vc6C5hB4DyOpmxraeUc0Ar4mAw567VOKlaBk0qwdFxyB37cgiGNiKYXww7/exec"
   const SHEET_NAME = "FMS"
@@ -12,6 +15,30 @@ export function GateEntryView() {
   useEffect(() => {
     fetchSheetData()
   }, [])
+
+  useEffect(() => {
+    // Apply filters whenever data or filter values change
+    let result = [...gateEntryData]
+    
+    // Apply customer filter
+    if (customerFilter) {
+      result = result.filter(item => item.customerName === customerFilter)
+    }
+    
+    // Apply search term filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      result = result.filter(item => 
+        item.orderNumber.toLowerCase().includes(term) ||
+        item.gateEntryNumber.toLowerCase().includes(term) ||
+        item.customerName.toLowerCase().includes(term) ||
+        item.truckNumber.toLowerCase().includes(term) ||
+        item.timestamp.toLowerCase().includes(term)
+      )
+    }
+    
+    setFilteredData(result)
+  }, [gateEntryData, customerFilter, searchTerm])
 
   const fetchSheetData = async () => {
     try {
@@ -67,6 +94,7 @@ export function GateEntryView() {
         }
         
         setGateEntryData(processedData)
+        setFilteredData(processedData)
       } else {
         setError(result.error || "Failed to fetch data")
       }
@@ -76,6 +104,9 @@ export function GateEntryView() {
       setLoading(false)
     }
   }
+
+  // Get unique customer names for the dropdown
+  const customerNames = [...new Set(gateEntryData.map(item => item.customerName))].filter(name => name).sort()
 
   if (loading) {
     return (
@@ -140,47 +171,138 @@ export function GateEntryView() {
         <div className="px-6 py-4 border-b">
           <h3 className="text-lg font-semibold">Gate Entry Records</h3>
           <p className="text-gray-600 text-sm">
-            All vehicles that have entered the facility ({gateEntryData.length} records)
+            All vehicles that have entered the facility ({filteredData.length} records)
           </p>
+          
+          {/* Filter Controls */}
+          <div className="mt-4 flex flex-col sm:flex-row gap-4">
+            <div className="w-full sm:w-auto">
+              <label htmlFor="customer-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Customer
+              </label>
+              <select
+                id="customer-filter"
+                value={customerFilter}
+                onChange={(e) => setCustomerFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">All Customers</option>
+                {customerNames.map((name, index) => (
+                  <option key={index} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="w-full sm:flex-1">
+              <label htmlFor="search-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Search
+              </label>
+              <input
+                id="search-filter"
+                type="text"
+                placeholder="Search by order number, gate entry, customer, truck number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setCustomerFilter('')
+                  setSearchTerm('')
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {gateEntryData.length > 0 ? (
-                gateEntryData.map((entry, index) => (
-                  <tr key={entry.gateEntryNumber || index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.timestamp}</td>
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{entry.orderNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateEntryNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.customerName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.truckNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                        {entry.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No data found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="overflow-x-auto mobile-card-view" style={{ maxHeight: '450px', overflowY: 'auto' }}>
+  {/* Desktop Table View */}
+  <table className="w-full hidden md:table">
+    <thead className="bg-gray-50 border-b">
+      <tr>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+      </tr>
+    </thead>
+    <tbody className="divide-y divide-gray-200">
+      {filteredData.length > 0 ? (
+        filteredData.map((entry, index) => (
+          <tr key={entry.gateEntryNumber || index} className="hover:bg-gray-50">
+            <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.timestamp}</td>
+            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{entry.orderNumber}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateEntryNumber}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.customerName}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.truckNumber}</td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                {entry.status}
+              </span>
+            </td>
+          </tr>
+        ))
+      ) : (
+        <tr>
+          <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+            No matching records found
+          </td>
+        </tr>
+      )}
+    </tbody>
+  </table>
+
+  {/* Mobile Card View */}
+  <div className="md:hidden">
+    {filteredData.length > 0 ? (
+      filteredData.map((entry, index) => (
+        <div key={entry.gateEntryNumber || index} className="mobile-card">
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Timestamp:</span>
+            <span className="mobile-card-value">{entry.timestamp}</span>
+          </div>
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Order Number:</span>
+            <span className="mobile-card-value">{entry.orderNumber}</span>
+          </div>
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Gate Entry Number:</span>
+            <span className="mobile-card-value">{entry.gateEntryNumber}</span>
+          </div>
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Customer Name:</span>
+            <span className="mobile-card-value">{entry.customerName}</span>
+          </div>
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Truck Number:</span>
+            <span className="mobile-card-value">{entry.truckNumber}</span>
+          </div>
+          <div className="mobile-card-row">
+            <span className="mobile-card-label">Status:</span>
+            <span className="mobile-card-value">
+              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                {entry.status}
+              </span>
+            </span>
+          </div>
         </div>
+      ))
+    ) : (
+      <div className="px-6 py-8 text-center text-gray-500">
+        No matching records found
+      </div>
+    )}
+  </div>
+</div>
       </div>
     </div>
   )

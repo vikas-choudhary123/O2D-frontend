@@ -20,10 +20,45 @@ export function PaymentView() {
   const [searchQuery, setSearchQuery] = useState("")
   const [customerFilter, setCustomerFilter] = useState("")
   const [itemFilter, setItemFilter] = useState("") // ✅ Added Item Name filter
+  const [deductionAmount, setDeductionAmount] = useState("")
 
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzl1EP1Vc6C5hB4DyOpmxraeUc0Ar4mAw567VOKlaBk0qwdFxyB37cgiGNiKYXww7/exec"
   const FMS_SHEET_NAME = "FMS"
   const PAYMENT_SHEET_NAME = "Payment Flw-Up"
+
+  const [sortOrder, setSortOrder] = useState('none'); // 'none', 'asc', 'desc'
+
+// Add this function to handle sorting
+const handleSort = () => {
+  if (sortOrder === 'none') {
+    setSortOrder('asc');
+  } else if (sortOrder === 'asc') {
+    setSortOrder('desc');
+  } else {
+    setSortOrder('none');
+  }
+};
+
+// Add this useEffect to apply sorting when sortOrder changes
+useEffect(() => {
+  if (sortOrder === 'none') {
+    setFilteredPendingData([...pendingData]);
+    return;
+  }
+
+  const sortedData = [...filteredPendingData].sort((a, b) => {
+    const nameA = a.customerName.toLowerCase();
+    const nameB = b.customerName.toLowerCase();
+    
+    if (sortOrder === 'asc') {
+      return nameA.localeCompare(nameB);
+    } else {
+      return nameB.localeCompare(nameA);
+    }
+  });
+  
+  setFilteredPendingData(sortedData);
+}, [sortOrder, pendingData]);
 
   useEffect(() => {
     fetchSheetData()
@@ -197,6 +232,8 @@ export function PaymentView() {
           const receivedAmount = row[5] || ""      // Column F
           const remarks = row[6] || ""             // Column G
           const nextDateOfCall = row[7] || ""      // Column H
+          const invoice = row[8] || ""
+          const deduction  = row[9] || ""
           
           // Only process rows that have at least some data
           if (orderNumber || partyName) {
@@ -208,6 +245,8 @@ export function PaymentView() {
               receivedAmount: receivedAmount.toString(),
               remarks: remarks.toString(),
               nextDateOfCall: nextDateOfCall.toString(),
+              invoice: invoice.toString(),
+              deduction: deduction.toString(),
               rowIndex: i + 1
             })
           }
@@ -228,65 +267,68 @@ export function PaymentView() {
   }
 
   const handleProcessPayment = async () => {
-    if (!selectedEntry || !paymentStatus) {
-      alert("Please select payment status")
-      return
-    }
-
-    try {
-      setIsSubmitting(true)
-       const timestamp = new Date().toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata'
-      });
-      
-      // Prepare data for Payment Flw-Up sheet
-      const rowData = [
-        timestamp,                                    // Column A (empty)
-        selectedEntry.orderNumber,            // Column B
-        selectedEntry.customerName,           // Column C (Party Name)
-        paymentStatus,                        // Column D
-        receivingMode || "",                  // Column E
-        receivedAmount || "",                 // Column F
-        remarks || "",                        // Column G
-        nextDateOfCall || ""                  // Column H
-      ]
-      
-      // Create form data for adding to Payment Flw-Up sheet
-      const formData = new FormData()
-      formData.append('sheetName', PAYMENT_SHEET_NAME)
-      formData.append('action', 'insert')
-      formData.append('rowData', JSON.stringify(rowData))
-
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-      
-      if (result.success) {
-        // Reset form
-        setSelectedEntry(null)
-        setPaymentStatus("")
-        setReceivingMode("")
-        setReceivedAmount("")
-        setNextDateOfCall("")
-        setRemarks("")
-        setShowDialog(false)
-        
-        // Refresh data
-        await fetchSheetData()
-        
-        alert("Payment processed successfully!")
-      } else {
-        alert("Error: " + (result.error || "Failed to process payment"))
-      }
-    } catch (error) {
-      alert("Error processing payment: " + error.message)
-    } finally {
-      setIsSubmitting(false)
-    }
+  if (!selectedEntry || !paymentStatus) {
+    alert("Please select payment status")
+    return
   }
+
+  try {
+    setIsSubmitting(true)
+    const timestamp = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata'
+    });
+    
+    // Prepare data for Payment Flw-Up sheet
+    const rowData = [
+      timestamp,                                    // Column A (Timestamp)
+      selectedEntry.orderNumber,                    // Column B
+      selectedEntry.customerName,                   // Column C (Party Name)
+      paymentStatus,                                // Column D
+      receivingMode || "",                          // Column E
+      receivedAmount || "",                         // Column F
+      remarks || "",                                // Column G
+      nextDateOfCall || "",                         // Column H
+      selectedEntry.invoiceNumber,                  // Column I (Invoice Number)
+      deductionAmount || ""                         // Column J (Deduction Amount)
+    ]
+    
+    // Create form data for adding to Payment Flw-Up sheet
+    const formData = new FormData()
+    formData.append('sheetName', PAYMENT_SHEET_NAME)
+    formData.append('action', 'insert')
+    formData.append('rowData', JSON.stringify(rowData))
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: formData
+    })
+
+    const result = await response.json()
+    
+    if (result.success) {
+      // Reset form
+      setSelectedEntry(null)
+      setPaymentStatus("")
+      setReceivingMode("")
+      setReceivedAmount("")
+      setDeductionAmount("") // Reset deduction amount
+      setNextDateOfCall("")
+      setRemarks("")
+      setShowDialog(false)
+      
+      // Refresh data
+      await fetchSheetData()
+      
+      alert("Payment processed successfully!")
+    } else {
+      alert("Error: " + (result.error || "Failed to process payment"))
+    }
+  } catch (error) {
+    alert("Error processing payment: " + error.message)
+  } finally {
+    setIsSubmitting(false)
+  }
+}
 
   const openDialog = (entry) => {
     setSelectedEntry(entry)
@@ -294,14 +336,15 @@ export function PaymentView() {
   }
 
   const closeDialog = () => {
-    setShowDialog(false)
-    setSelectedEntry(null)
-    setPaymentStatus("")
-    setReceivingMode("")
-    setReceivedAmount("")
-    setNextDateOfCall("")
-    setRemarks("")
-  }
+  setShowDialog(false)
+  setSelectedEntry(null)
+  setPaymentStatus("")
+  setReceivingMode("")
+  setReceivedAmount("")
+  setDeductionAmount("") // Add this line
+  setNextDateOfCall("")
+  setRemarks("")
+}
 
   // Get unique customer names for filter dropdown
   const uniqueCustomerNames = [...new Set(pendingData.map(item => item.customerName))].filter(name => name);
@@ -458,14 +501,19 @@ export function PaymentView() {
               <h3 className="text-lg font-semibold">Pending Payments</h3>
               <p className="text-gray-600 text-sm">Invoices awaiting payment</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ maxHeight: '360px', overflowY: 'auto' }}>
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Planned</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                    {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th> */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={handleSort}>
+  Customer Name
+  {sortOrder === 'asc' && ' ↑'}
+  {sortOrder === 'desc' && ' ↓'}
+</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Number</th>
                     {/* ✅ Added new columns */}
@@ -539,7 +587,7 @@ export function PaymentView() {
               <h3 className="text-lg font-semibold">Payment History</h3>
               <p className="text-gray-600 text-sm">Processed payments</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
@@ -550,6 +598,8 @@ export function PaymentView() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received Amount</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Date Of Call</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice No.</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deduction Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -571,6 +621,8 @@ export function PaymentView() {
                         <td className="px-6 py-4 whitespace-nowrap font-medium text-green-600">{entry.receivedAmount}</td>
                         <td className="px-6 py-4 whitespace-nowrap max-w-xs truncate text-gray-900">{entry.remarks}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.nextDateOfCall}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.invoice}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.deductionamount}</td>
                       </tr>
                     ))
                   ) : (
@@ -589,110 +641,120 @@ export function PaymentView() {
 
       {/* Dialog Modal */}
       {showDialog && selectedEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold">Process Payment</h3>
-              <p className="text-gray-600 text-sm">Process payment for invoice {selectedEntry.invoiceNumber}</p>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
-                <select
-                  value={paymentStatus}
-                  onChange={(e) => setPaymentStatus(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select payment status</option>
-                  <option value="Follow Up">Follow Up</option>
-                  <option value="Received">Received</option>
-                </select>
-              </div>
-
-              {paymentStatus === "Follow Up" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Next Date of Call</label>
-                    <input
-                      type="date"
-                      value={nextDateOfCall}
-                      onChange={(e) => setNextDateOfCall(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-                    <textarea
-                      placeholder="Enter any remarks..."
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </>
-              )}
-
-              {paymentStatus === "Received" && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Receiving Mode</label>
-                    <select
-                      value={receivingMode}
-                      onChange={(e) => setReceivingMode(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select receiving mode</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Bank Transfer">Bank Transfer</option>
-                      <option value="Cheque">Cheque</option>
-                      <option value="UPI">UPI</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Received Amount</label>
-                    <input
-                      type="text"
-                      placeholder="Enter received amount"
-                      value={receivedAmount}
-                      onChange={(e) => setReceivedAmount(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-                    <textarea
-                      placeholder="Enter any remarks..."
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={closeDialog}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleProcessPayment}
-                disabled={isSubmitting || !paymentStatus}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-              >
-                {isSubmitting ? "Processing..." : "Process Payment"}
-              </button>
-            </div>
-          </div>
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold">Process Payment</h3>
+        <p className="text-gray-600 text-sm">Process payment for invoice {selectedEntry.invoiceNumber}</p>
+      </div>
+      
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
+          <select
+            value={paymentStatus}
+            onChange={(e) => setPaymentStatus(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Select payment status</option>
+            <option value="Follow Up">Follow Up</option>
+            <option value="Received">Received</option>
+          </select>
         </div>
-      )}
+
+        {paymentStatus === "Follow Up" && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Next Date of Call</label>
+              <input
+                type="date"
+                value={nextDateOfCall}
+                onChange={(e) => setNextDateOfCall(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
+              <textarea
+                placeholder="Enter any remarks..."
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </>
+        )}
+
+        {paymentStatus === "Received" && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Receiving Mode</label>
+              <select
+                value={receivingMode}
+                onChange={(e) => setReceivingMode(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select receiving mode</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cheque">Cheque</option>
+                <option value="UPI">UPI</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Received Amount</label>
+              <input
+                type="text"
+                placeholder="Enter received amount"
+                value={receivedAmount}
+                onChange={(e) => setReceivedAmount(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Deduction Amount</label>
+              <input
+                type="text"
+                placeholder="Enter deduction amount (if any)"
+                value={deductionAmount}
+                onChange={(e) => setDeductionAmount(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
+              <textarea
+                placeholder="Enter any remarks..."
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </>
+        )}
+      </div>
+      
+      <div className="flex justify-end space-x-3 mt-6">
+        <button
+          onClick={closeDialog}
+          disabled={isSubmitting}
+          className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleProcessPayment}
+          disabled={isSubmitting || !paymentStatus}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+        >
+          {isSubmitting ? "Processing..." : "Process Payment"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }
