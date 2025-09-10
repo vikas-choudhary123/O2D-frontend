@@ -33,95 +33,134 @@ export function OrdersView() {
     customers: [],
     items: []
   })
+    const [balanceTotals, setBalanceTotals] = useState({
+    pending: 0,
+    complete: 0,
+    cancel: 0,
+    partial: 0
+  })
   
 
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuC7Cy9GMEziCJi2wbP7S27ERl-_ZhpssLwFZ8_IUgf_Z6oJla8lV45VyX47vFIWg7/exec"
 
-  const fetchOrderData = async () => {
+const fetchOrderData = async () => {
+  try {
+    setLoading(true)
+    setError(null)
+    
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=ImporterSheet&action=fetch`)
+    const result = await response.json()
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to fetch data')
+    }
+
+    const data = result.data
+    if (!data || data.length === 0) {
+      throw new Error('No data received from sheet')
+    }
+
+    // Assuming first row contains headers
+    const headers = data[0]
+    const rows = data.slice(1)
+
+    // Find column indices
+    const salesPersonIndex = headers.findIndex(h => h.toLowerCase().includes('salesperson'))
+    const customerIndex = headers.findIndex(h => h.toLowerCase().includes('customer_name'))
+    const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
+    const dateIndex = headers.findIndex(h => h.toLowerCase().includes('vrdate'))
+    const itemIndex = headers.findIndex(h => h.toLowerCase().includes('item_name'))
+    const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('entry_remark'))
+    const priorityIndex = headers.findIndex(h => h.toLowerCase().includes('priority'))
+    const rateIndex = headers.findIndex(h => h.toLowerCase().includes('rate'))
+    const balanceIndex = headers.findIndex(h => h.toLowerCase().includes('balance_qty'))
+    const statusIndex = headers.findIndex(h => h.toLowerCase().includes('status'))
+
+    // Process rows into order objects
+ // Process rows into order objects
+const processedOrders = rows.map((row, index) => {
+  // Format date as dd/mm/yy and include time
+  const originalDate = row[dateIndex] || '';
+  let formattedDateTime = originalDate;
+  
+  // Try to parse the date if it's in a different format
+  if (originalDate) {
     try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=ImporterSheet&action=fetch`)
-      const result = await response.json()
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch data')
+      const dateObj = new Date(originalDate);
+      if (!isNaN(dateObj.getTime())) {
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const year = String(dateObj.getFullYear()).slice(-2);
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        
+        formattedDateTime = `${day}/${month}/${year} ${hours}:${minutes}`;
       }
-
-      const data = result.data
-      if (!data || data.length === 0) {
-        throw new Error('No data received from sheet')
-      }
-
-      // Assuming first row contains headers
-      const headers = data[0]
-      const rows = data.slice(1)
-
-      // Find column indices
-      const salesPersonIndex = headers.findIndex(h => h.toLowerCase().includes('salesperson'))
-      const customerIndex = headers.findIndex(h => h.toLowerCase().includes('customer_name'))
-      const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
-      const dateIndex = headers.findIndex(h => h.toLowerCase().includes('vrdate'))
-      const itemIndex = headers.findIndex(h => h.toLowerCase().includes('item_name'))
-      const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('entry_remark'))
-      const priorityIndex = headers.findIndex(h => h.toLowerCase().includes('priority'))
-      const rateIndex = headers.findIndex(h => h.toLowerCase().includes('rate'))
-      const balanceIndex = headers.findIndex(h => h.toLowerCase().includes('balance_qty'))
-      const statusIndex = headers.findIndex(h => h.toLowerCase().includes('status'))
-
-      // Process rows into order objects
-      const processedOrders = rows.map((row, index) => ({
-        id: index + 1,
-        salesperson: row[salesPersonIndex] || '',
-        customerName: row[customerIndex] || '',
-        vrno: row[vrnoIndex] || '',
-        date: row[dateIndex] || '',
-        itemName: row[itemIndex] || '',
-        remarks: row[remarksIndex] || '',
-        priority: row[priorityIndex] || '',
-        rate: row[rateIndex] || '',
-        balanceQty: row[balanceIndex] || '',
-        status: row[statusIndex] || ''
-      }))
-
-      // Extract unique values for filters
-      const salespersons = [...new Set(processedOrders.map(order => order.salesperson).filter(Boolean))].sort()
-      const customers = [...new Set(processedOrders.map(order => order.customerName).filter(Boolean))].sort()
-      const items = [...new Set(processedOrders.map(order => order.itemName).filter(Boolean))].sort()
-      
-      setFilterOptions({
-        salespersons,
-        customers,
-        items
-      })
-
-      // Categorize orders by status
-      const pending = processedOrders.filter(order => 
-        order.status.toLowerCase().includes('pending') || order.status.toLowerCase().includes('open')
-      )
-      const complete = processedOrders.filter(order => 
-        order.status.toLowerCase().includes('complete') || order.status.toLowerCase().includes('completed')
-      )
-      const cancelled = processedOrders.filter(order => 
-        order.status.toLowerCase().includes('cancel') || order.status.toLowerCase().includes('cancelled')
-      )
-      const partial = processedOrders.filter(order => 
-        order.status.toLowerCase().includes('partial')
-      )
-
-      setPendingOrders(pending)
-      setCompleteOrders(complete)
-      setCancelOrders(cancelled)
-      setPartialOrders(partial)
-      
-    } catch (err) {
-      console.error('Error fetching data:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
+    } catch (e) {
+      // If parsing fails, keep the original date
+      console.log('Date parsing error:', e);
     }
   }
+
+  return {
+    id: index + 1,
+    salesperson: row[salesPersonIndex] || '',
+    customerName: row[customerIndex] || '',
+    vrno: row[vrnoIndex] || '',
+    date: formattedDateTime, // Use formatted date with time
+    itemName: row[itemIndex] || '',
+    remarks: row[remarksIndex] || '',
+    priority: row[priorityIndex] || '',
+    rate: row[rateIndex] || '',
+    balanceQty: parseFloat(row[balanceIndex]) || 0,
+    status: row[statusIndex] || ''
+  }
+})
+    // Extract unique values for filters
+    const salespersons = [...new Set(processedOrders.map(order => order.salesperson).filter(Boolean))].sort()
+    const customers = [...new Set(processedOrders.map(order => order.customerName).filter(Boolean))].sort()
+    const items = [...new Set(processedOrders.map(order => order.itemName).filter(Boolean))].sort()
+    
+    setFilterOptions({
+      salespersons,
+      customers,
+      items
+    })
+
+    // Categorize orders by status - ✅ ERROR FIXED YAHAN
+    const pending = processedOrders.filter(order => 
+      order.status.toLowerCase().includes('pending') || order.status.toLowerCase().includes('open')
+    )
+    const complete = processedOrders.filter(order => 
+      order.status.toLowerCase().includes('complete') || order.status.toLowerCase().includes('completed')
+    )
+    const cancelled = processedOrders.filter(order => 
+      order.status.toLowerCase().includes('cancel') || order.status.toLowerCase().includes('cancelled')
+    )
+    const partial = processedOrders.filter(order => 
+      order.status.toLowerCase().includes('partial')
+    )
+
+    // Calculate total balance quantities
+    setBalanceTotals({
+      pending: pending.reduce((sum, order) => sum + order.balanceQty, 0),
+      complete: complete.reduce((sum, order) => sum + order.balanceQty, 0),
+      cancel: cancelled.reduce((sum, order) => sum + order.balanceQty, 0),
+      partial: partial.reduce((sum, order) => sum + order.balanceQty, 0)
+    })
+
+    setPendingOrders(pending)
+    setCompleteOrders(complete)
+    setCancelOrders(cancelled)
+    setPartialOrders(partial)
+    
+  } catch (err) {
+    console.error('Error fetching data:', err)
+    setError(err.message)
+  } finally {
+    setLoading(false)
+  }
+}
 
    const filterOrders = (orders) => {
     return orders.filter(order => {
@@ -383,134 +422,147 @@ export function OrdersView() {
     )
   }
 
-  const renderTable = (data, type) => (
-    <div className="bg-white rounded-lg shadow border">
-      <div className="px-6 py-4 border-b">
+const renderTable = (data, type) => (
+  <div className="bg-white rounded-lg shadow border">
+    <div className="px-6 py-4 border-b flex justify-between items-center">
+      <div>
         <h3 className="text-lg font-semibold capitalize">{type} Orders</h3>
         <p className="text-gray-600 text-sm">Orders with {type} status</p>
       </div>
-      
-      {/* Filters Section */}
-      <div className="p-4 bg-gray-50 border-b">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Salesperson Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
-            <select
-              value={filters.salesperson}
-              onChange={(e) => setFilters({...filters, salesperson: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Salespersons</option>
-              {filterOptions.salespersons.map((salesperson, index) => (
-                <option key={index} value={salesperson}>{salesperson}</option>
-              ))}
-            </select>
-          </div>
-          
-          {/* Customer Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-            <select
-              value={filters.customer}
-              onChange={(e) => setFilters({...filters, customer: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Customers</option>
-              {filterOptions.customers.map((customer, index) => (
-                <option key={index} value={customer}>{customer}</option>
-              ))}
-            </select>
-          </div>
-          
-          {/* Item Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-            <select
-              value={filters.item}
-              onChange={(e) => setFilters({...filters, item: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Items</option>
-              {filterOptions.items.map((item, index) => (
-                <option key={index} value={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          
-          {/* Search Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Search orders..."
-            />
-          </div>
+      <div className="px-3 py-2">
+        <span className="text-gray-700 font-medium">Total Balance Qty: </span>
+        <span className="text-gray-800 font-bold">
+          {typeof balanceTotals[type] === 'number' ? balanceTotals[type].toFixed(2) : '0.00'}
+        </span>
+      </div>
+    </div>
+    
+    {/* Filters Section */}
+    <div className="p-4 bg-gray-50 border-b">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Salesperson Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
+          <select
+            value={filters.salesperson}
+            onChange={(e) => setFilters({...filters, salesperson: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Salespersons</option>
+            {filterOptions.salespersons.map((salesperson, index) => (
+              <option key={index} value={salesperson}>{salesperson}</option>
+            ))}
+          </select>
         </div>
         
-        {/* Clear Filters Button */}
-        {(filters.salesperson || filters.customer || filters.item || filters.search) && (
-          <div className="mt-3">
-            <button
-              onClick={() => setFilters({
-                status: 'all',
-                salesperson: '',
-                customer: '',
-                item: '',
-                search: ''
-              })}
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              Clear all filters
-            </button>
-          </div>
-        )}
+        {/* Customer Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+          <select
+            value={filters.customer}
+            onChange={(e) => setFilters({...filters, customer: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Customers</option>
+            {filterOptions.customers.map((customer, index) => (
+              <option key={index} value={customer}>{customer}</option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Item Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
+          <select
+            value={filters.item}
+            onChange={(e) => setFilters({...filters, item: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Items</option>
+            {filterOptions.items.map((item, index) => (
+              <option key={index} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Search Filter */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            value={filters.search}
+            onChange={(e) => setFilters({...filters, search: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Search orders..."
+          />
+        </div>
       </div>
       
-      <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b sticky top-0 z-10">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VR No</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+      {/* Clear Filters Button */}
+      {(filters.salesperson || filters.customer || filters.item || filters.search) && (
+        <div className="mt-3">
+          <button
+            onClick={() => setFilters({
+              status: 'all',
+              salesperson: '',
+              customer: '',
+              item: '',
+              search: ''
+            })}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            Clear all filters
+          </button>
+        </div>
+      )}
+    </div>
+    
+    <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
+      <table className="w-full">
+        <thead className="bg-gray-50 border-b sticky top-0 z-10">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VR No</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            {type === "pending" && (
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filterOrders(data).length > 0 ? (
-              filterOrders(data).map((order) => (
-                <tr key={order.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.salesperson}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.customerName}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.vrno}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.date}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.itemName}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{order.remarks}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.priority}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.rate}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.balanceQty}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      type === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      type === 'complete' ? 'bg-green-100 text-green-800' :
-                      type === 'cancel' ? 'bg-red-100 text-red-800' :
-                      type === 'partial' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {order.status}
-                    </span>
-                  </td>
+            )}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {filterOrders(data).length > 0 ? (
+            filterOrders(data).map((order) => (
+              <tr key={order.id} className="hover:bg-gray-50">
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.salesperson}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.customerName}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.vrno}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.date}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.itemName}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{order.remarks}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.priority}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.rate}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {typeof order.balanceQty === 'number' ? order.balanceQty.toFixed(2) : order.balanceQty}
+                </td>
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    type === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    type === 'complete' ? 'bg-green-100 text-green-800' :
+                    type === 'cancel' ? 'bg-red-100 text-red-800' :
+                    type === 'partial' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {order.status}
+                  </span>
+                </td>
+                {type === "pending" && (
                   <td className="px-4 py-4 whitespace-nowrap">
                     <button
                       onClick={() => handleProcessOrder(order)}
@@ -519,20 +571,21 @@ export function OrdersView() {
                       Process
                     </button>
                   </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="11" className="px-6 py-8 text-center text-gray-500">
-                  No {type} orders found matching your filters
-                </td>
+                )}
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={type === "pending" ? 11 : 10} className="px-6 py-8 text-center text-gray-500">
+                No {type} orders found matching your filters
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
-  )
+  </div>
+)
 
   return (
     <div className="space-y-6">
