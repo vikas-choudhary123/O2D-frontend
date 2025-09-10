@@ -20,7 +20,7 @@ export function OrdersView() {
   const [submitting, setSubmitting] = useState(false)
   const [historyData, setHistoryData] = useState([])
   const [filteredHistory, setFilteredHistory] = useState([])
-   const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState({
     status: 'all',
     salesperson: '',
     customer: '',
@@ -33,183 +33,31 @@ export function OrdersView() {
     customers: [],
     items: []
   })
-    const [balanceTotals, setBalanceTotals] = useState({
+  const [balanceTotals, setBalanceTotals] = useState({
     pending: 0,
     complete: 0,
     cancel: 0,
     partial: 0
   })
-  
+
 
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuC7Cy9GMEziCJi2wbP7S27ERl-_ZhpssLwFZ8_IUgf_Z6oJla8lV45VyX47vFIWg7/exec"
 
-const fetchOrderData = async () => {
-  try {
-    setLoading(true)
-    setError(null)
-    
-    const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=ImporterSheet&action=fetch`)
-    const result = await response.json()
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to fetch data')
-    }
-
-    const data = result.data
-    if (!data || data.length === 0) {
-      throw new Error('No data received from sheet')
-    }
-
-    // Assuming first row contains headers
-    const headers = data[0]
-    const rows = data.slice(1)
-
-    // Find column indices
-    const salesPersonIndex = headers.findIndex(h => h.toLowerCase().includes('salesperson'))
-    const customerIndex = headers.findIndex(h => h.toLowerCase().includes('customer_name'))
-    const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
-    const dateIndex = headers.findIndex(h => h.toLowerCase().includes('vrdate'))
-    const itemIndex = headers.findIndex(h => h.toLowerCase().includes('item_name'))
-    const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('entry_remark'))
-    const priorityIndex = headers.findIndex(h => h.toLowerCase().includes('priority'))
-    const rateIndex = headers.findIndex(h => h.toLowerCase().includes('rate'))
-    const balanceIndex = headers.findIndex(h => h.toLowerCase().includes('balance_qty'))
-    const statusIndex = headers.findIndex(h => h.toLowerCase().includes('status'))
-
-    // Process rows into order objects
- // Process rows into order objects
-const processedOrders = rows.map((row, index) => {
-  // Format date as dd/mm/yy and include time
-  const originalDate = row[dateIndex] || '';
-  let formattedDateTime = originalDate;
-  
-  // Try to parse the date if it's in a different format
-  if (originalDate) {
-    try {
-      const dateObj = new Date(originalDate);
-      if (!isNaN(dateObj.getTime())) {
-        const day = String(dateObj.getDate()).padStart(2, '0');
-        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const year = String(dateObj.getFullYear()).slice(-2);
-        const hours = String(dateObj.getHours()).padStart(2, '0');
-        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-        
-        formattedDateTime = `${day}/${month}/${year} ${hours}:${minutes}`;
-      }
-    } catch (e) {
-      // If parsing fails, keep the original date
-      console.log('Date parsing error:', e);
-    }
-  }
-
-  return {
-    id: index + 1,
-    salesperson: row[salesPersonIndex] || '',
-    customerName: row[customerIndex] || '',
-    vrno: row[vrnoIndex] || '',
-    date: formattedDateTime, // Use formatted date with time
-    itemName: row[itemIndex] || '',
-    remarks: row[remarksIndex] || '',
-    priority: row[priorityIndex] || '',
-    rate: row[rateIndex] || '',
-    balanceQty: parseFloat(row[balanceIndex]) || 0,
-    status: row[statusIndex] || ''
-  }
-})
-    // Extract unique values for filters
-    const salespersons = [...new Set(processedOrders.map(order => order.salesperson).filter(Boolean))].sort()
-    const customers = [...new Set(processedOrders.map(order => order.customerName).filter(Boolean))].sort()
-    const items = [...new Set(processedOrders.map(order => order.itemName).filter(Boolean))].sort()
-    
-    setFilterOptions({
-      salespersons,
-      customers,
-      items
-    })
-
-    // Categorize orders by status - ✅ ERROR FIXED YAHAN
-    const pending = processedOrders.filter(order => 
-      order.status.toLowerCase().includes('pending') || order.status.toLowerCase().includes('open')
-    )
-    const complete = processedOrders.filter(order => 
-      order.status.toLowerCase().includes('complete') || order.status.toLowerCase().includes('completed')
-    )
-    const cancelled = processedOrders.filter(order => 
-      order.status.toLowerCase().includes('cancel') || order.status.toLowerCase().includes('cancelled')
-    )
-    const partial = processedOrders.filter(order => 
-      order.status.toLowerCase().includes('partial')
-    )
-
-    // Calculate total balance quantities
-    setBalanceTotals({
-      pending: pending.reduce((sum, order) => sum + order.balanceQty, 0),
-      complete: complete.reduce((sum, order) => sum + order.balanceQty, 0),
-      cancel: cancelled.reduce((sum, order) => sum + order.balanceQty, 0),
-      partial: partial.reduce((sum, order) => sum + order.balanceQty, 0)
-    })
-
-    setPendingOrders(pending)
-    setCompleteOrders(complete)
-    setCancelOrders(cancelled)
-    setPartialOrders(partial)
-    
-  } catch (err) {
-    console.error('Error fetching data:', err)
-    setError(err.message)
-  } finally {
-    setLoading(false)
-  }
-}
-
-   const filterOrders = (orders) => {
-    return orders.filter(order => {
-      // Filter by salesperson
-      if (filters.salesperson && order.salesperson !== filters.salesperson) {
-        return false
-      }
-      
-      // Filter by customer
-      if (filters.customer && order.customerName !== filters.customer) {
-        return false
-      }
-      
-      // Filter by item
-      if (filters.item && order.itemName !== filters.item) {
-        return false
-      }
-      
-      // Filter by search term
-      if (filters.search) {
-        const searchTerm = filters.search.toLowerCase()
-        const matchesSearch = 
-          order.vrno.toLowerCase().includes(searchTerm) ||
-          order.customerName.toLowerCase().includes(searchTerm) ||
-          order.itemName.toLowerCase().includes(searchTerm) ||
-          order.remarks.toLowerCase().includes(searchTerm)
-        
-        if (!matchesSearch) return false
-      }
-      
-      return true
-    })
-  }
-
-  const fetchHistoryData = async () => {
+  const fetchOrderData = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=Order-Flw-Up&action=fetch`)
+      setError(null)
+
+      const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=ImporterSheet&action=fetch`)
       const result = await response.json()
-      
+
       if (!result.success) {
-        throw new Error(result.error || 'Failed to fetch history data')
+        throw new Error(result.error || 'Failed to fetch data')
       }
 
       const data = result.data
       if (!data || data.length === 0) {
-        setHistoryData([])
-        setFilteredHistory([])
-        return
+        throw new Error('No data received from sheet')
       }
 
       // Assuming first row contains headers
@@ -217,32 +65,208 @@ const processedOrders = rows.map((row, index) => {
       const rows = data.slice(1)
 
       // Find column indices
-      const timestampIndex = headers.findIndex(h => h.toLowerCase().includes('timestamp'))
+      const salesPersonIndex = headers.findIndex(h => h.toLowerCase().includes('salesperson'))
+      const customerIndex = headers.findIndex(h => h.toLowerCase().includes('customer_name'))
       const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
-      const arrangeLogisticIndex = headers.findIndex(h => h.toLowerCase().includes('arrange logistic'))
-      const qtyIndex = headers.findIndex(h => h.toLowerCase().includes('qty'))
-      const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('remarks'))
+      const dateIndex = headers.findIndex(h => h.toLowerCase().includes('vrdate'))
+      const itemIndex = headers.findIndex(h => h.toLowerCase().includes('item_name'))
+      const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('entry_remark'))
+      const priorityIndex = headers.findIndex(h => h.toLowerCase().includes('priority'))
+      const rateIndex = headers.findIndex(h => h.toLowerCase().includes('rate'))
+      const balanceIndex = headers.findIndex(h => h.toLowerCase().includes('balance_qty'))
+      const statusIndex = headers.findIndex(h => h.toLowerCase().includes('status'))
 
-      // Process rows into history objects
-      const processedHistory = rows.map((row, index) => ({
-        id: index + 1,
-        timestamp: row[timestampIndex] || '',
-        vrno: row[vrnoIndex] || '',
-        arrangeLogistic: row[arrangeLogisticIndex] || '',
-        qty: row[qtyIndex] || '',
-        remarks: row[remarksIndex] || ''
-      }))
+      // Process rows into order objects
+      // Process rows into order objects
+      const processedOrders = rows.map((row, index) => {
+        // Format date as dd/mm/yy and include time
+        const originalDate = row[dateIndex] || '';
+        let formattedDateTime = originalDate;
 
-      setHistoryData(processedHistory)
-      setFilteredHistory(processedHistory)
-      
+        // Try to parse the date if it's in a different format
+        if (originalDate) {
+          try {
+            const dateObj = new Date(originalDate);
+            if (!isNaN(dateObj.getTime())) {
+              const day = String(dateObj.getDate()).padStart(2, '0');
+              const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+              const year = String(dateObj.getFullYear()).slice(-2);
+              const hours = String(dateObj.getHours()).padStart(2, '0');
+              const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+
+              formattedDateTime = `${day}/${month}/${year} ${hours}:${minutes}`;
+            }
+          } catch (e) {
+            // If parsing fails, keep the original date
+            console.log('Date parsing error:', e);
+          }
+        }
+
+        return {
+          id: index + 1,
+          salesperson: row[salesPersonIndex] || '',
+          customerName: row[customerIndex] || '',
+          vrno: row[vrnoIndex] || '',
+          date: formattedDateTime, // Use formatted date with time
+          itemName: row[itemIndex] || '',
+          remarks: row[remarksIndex] || '',
+          priority: row[priorityIndex] || '',
+          rate: row[rateIndex] || '',
+          balanceQty: parseFloat(row[balanceIndex]) || 0,
+          status: row[statusIndex] || ''
+        }
+      })
+      // Extract unique values for filters
+      const salespersons = [...new Set(processedOrders.map(order => order.salesperson).filter(Boolean))].sort()
+      const customers = [...new Set(processedOrders.map(order => order.customerName).filter(Boolean))].sort()
+      const items = [...new Set(processedOrders.map(order => order.itemName).filter(Boolean))].sort()
+
+      setFilterOptions({
+        salespersons,
+        customers,
+        items
+      })
+
+      // Categorize orders by status - ✅ ERROR FIXED YAHAN
+      const pending = processedOrders.filter(order =>
+        order.status.toLowerCase().includes('pending') || order.status.toLowerCase().includes('open')
+      )
+      const complete = processedOrders.filter(order =>
+        order.status.toLowerCase().includes('complete') || order.status.toLowerCase().includes('completed')
+      )
+      const cancelled = processedOrders.filter(order =>
+        order.status.toLowerCase().includes('cancel') || order.status.toLowerCase().includes('cancelled')
+      )
+      const partial = processedOrders.filter(order =>
+        order.status.toLowerCase().includes('partial')
+      )
+
+      // Calculate total balance quantities
+      setBalanceTotals({
+        pending: pending.reduce((sum, order) => sum + order.balanceQty, 0),
+        complete: complete.reduce((sum, order) => sum + order.balanceQty, 0),
+        cancel: cancelled.reduce((sum, order) => sum + order.balanceQty, 0),
+        partial: partial.reduce((sum, order) => sum + order.balanceQty, 0)
+      })
+
+      setPendingOrders(pending)
+      setCompleteOrders(complete)
+      setCancelOrders(cancelled)
+      setPartialOrders(partial)
+
     } catch (err) {
-      console.error('Error fetching history data:', err)
-      alert('Error fetching history data: ' + err.message)
+      console.error('Error fetching data:', err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
+
+  const filterOrders = (orders) => {
+    return orders.filter(order => {
+      // Filter by salesperson
+      if (filters.salesperson && order.salesperson !== filters.salesperson) {
+        return false
+      }
+
+      // Filter by customer
+      if (filters.customer && order.customerName !== filters.customer) {
+        return false
+      }
+
+      // Filter by item
+      if (filters.item && order.itemName !== filters.item) {
+        return false
+      }
+
+      // Filter by search term
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase()
+        const matchesSearch =
+          order.vrno.toLowerCase().includes(searchTerm) ||
+          order.customerName.toLowerCase().includes(searchTerm) ||
+          order.itemName.toLowerCase().includes(searchTerm) ||
+          order.remarks.toLowerCase().includes(searchTerm)
+
+        if (!matchesSearch) return false
+      }
+
+      return true
+    })
+  }
+
+ const fetchHistoryData = async () => {
+  try {
+    setLoading(true)
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?sheet=Order-Flw-Up&action=fetch`)
+    const result = await response.json()
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to fetch history data')
+    }
+
+    const data = result.data
+    if (!data || data.length === 0) {
+      setHistoryData([])
+      setFilteredHistory([])
+      return
+    }
+
+    const headers = data[0]
+    const rows = data.slice(1)
+
+    // Find column indices
+    const timestampIndex = headers.findIndex(h => h.toLowerCase().includes('timestamp'))
+    const vrnoIndex = headers.findIndex(h => h.toLowerCase().includes('vrno'))
+    const arrangeLogisticIndex = headers.findIndex(h => h.toLowerCase().includes('arrange logistic'))
+    const qtyIndex = headers.findIndex(h => h.toLowerCase().includes('qty'))
+    const remarksIndex = headers.findIndex(h => h.toLowerCase().includes('remarks'))
+    const salespersonIndex = headers.findIndex(h => h.toLowerCase().includes('salesperson'))
+    
+    // Enhanced customer column detection
+    let customerIndex = headers.findIndex(h => {
+      const headerLower = h.toLowerCase()
+      return headerLower.includes('customer') || 
+             headerLower.includes('party') || 
+             headerLower.includes('customer_name') ||
+             headerLower.includes('customername') ||
+             headerLower.includes('party_name') ||
+             headerLower.includes('partyname')
+    })
+    
+    // If not found by name, use Column G (index 6) since you're submitting to Column G
+    if (customerIndex === -1) {
+      customerIndex = 6  // Column G = index 6
+    }
+    
+    const itemIndex = headers.findIndex(h => h.toLowerCase().includes('item'))
+
+    console.log('Customer Index:', customerIndex)
+    console.log('Sample customer data:', rows[0] ? rows[0][customerIndex] : 'No data')
+
+    // Process rows into history objects
+    const processedHistory = rows.map((row, index) => ({
+      id: index + 1,
+      timestamp: row[timestampIndex] || '',
+      vrno: row[vrnoIndex] || '',
+      arrangeLogistic: row[arrangeLogisticIndex] || '',
+      qty: row[qtyIndex] || '',
+      remarks: row[remarksIndex] || '',
+      salesperson: row[salespersonIndex] || '',
+      customer: row[customerIndex] || '',  // Using fixed customer index
+      item: row[itemIndex] || ''
+    }))
+
+    setHistoryData(processedHistory)
+    setFilteredHistory(processedHistory)
+    
+  } catch (err) {
+    console.error('Error fetching history data:', err)
+    alert('Error fetching history data: ' + err.message)
+  } finally {
+    setLoading(false)
+  }
+}
 
   const handleProcessOrder = (order) => {
     setSelectedOrder(order)
@@ -253,9 +277,8 @@ const processedOrders = rows.map((row, index) => {
     })
     setShowModal(true)
   }
-
   const handleFormSubmit = async () => {
-    // Validation
+    // Validation - existing logic
     if (!formData.arrangeLogistic) {
       alert('Please select Arrange Logistic option')
       return
@@ -266,7 +289,7 @@ const processedOrders = rows.map((row, index) => {
       return
     }
 
-    if (formData.arrangeLogistic === 'No' && !formData.remarks) {
+    if (!formData.remarks) {
       alert('Please enter remarks')
       return
     }
@@ -275,14 +298,18 @@ const processedOrders = rows.map((row, index) => {
 
     try {
       const timestamp = new Date().toLocaleString()
-      
-      // Prepare row data array matching the Order-Flw-Up sheet columns
+
+      // Prepare row data array with additional columns
+      // Original columns + Salesperson (Column F) + Customer (Column G) + Item (Column H)
       const rowData = [
-        timestamp,
-        selectedOrder.vrno,
-        formData.arrangeLogistic,
-        formData.arrangeLogistic === 'Yes' ? formData.qty : '',
-        formData.arrangeLogistic === 'No' ? formData.remarks : ''
+        timestamp,                                      // Column A: Timestamp
+        selectedOrder.vrno,                            // Column B: VR No
+        formData.arrangeLogistic,                      // Column C: Arrange Logistic
+        formData.arrangeLogistic === 'Yes' ? formData.qty : '',  // Column D: Qty
+        formData.remarks,                              // Column E: Remarks
+        selectedOrder.salesperson || '',               // Column F: Salesperson (from frontend table)
+        selectedOrder.customerName || '',              // Column G: Party Name (from frontend table)
+        selectedOrder.itemName || ''                   // Column H: Item (from frontend table)
       ]
 
       // Create form data to match your existing Apps Script
@@ -297,7 +324,7 @@ const processedOrders = rows.map((row, index) => {
       })
 
       const result = await response.json()
-      
+
       if (result.success) {
         alert('Order processed successfully!')
         setShowModal(false)
@@ -343,7 +370,7 @@ const processedOrders = rows.map((row, index) => {
 
   const applyFilters = () => {
     let filtered = [...historyData]
-    
+
     // Apply status filter
     if (filters.status !== 'all') {
       filtered = filtered.filter(item => {
@@ -355,16 +382,16 @@ const processedOrders = rows.map((row, index) => {
         return true
       })
     }
-    
+
     // Apply search filter
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase()
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         item.vrno.toLowerCase().includes(searchTerm) ||
         item.remarks.toLowerCase().includes(searchTerm)
       )
     }
-    
+
     setFilteredHistory(filtered)
   }
 
@@ -409,7 +436,7 @@ const processedOrders = rows.map((row, index) => {
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Error loading data</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
-              <button 
+              <button
                 onClick={fetchOrderData}
                 className="mt-2 text-sm bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200"
               >
@@ -422,170 +449,169 @@ const processedOrders = rows.map((row, index) => {
     )
   }
 
-const renderTable = (data, type) => (
-  <div className="bg-white rounded-lg shadow border">
-    <div className="px-6 py-4 border-b flex justify-between items-center">
-      <div>
-        <h3 className="text-lg font-semibold capitalize">{type} Orders</h3>
-        <p className="text-gray-600 text-sm">Orders with {type} status</p>
-      </div>
-      <div className="px-3 py-2">
-        <span className="text-gray-700 font-medium">Total Balance Qty: </span>
-        <span className="text-gray-800 font-bold">
-          {typeof balanceTotals[type] === 'number' ? balanceTotals[type].toFixed(2) : '0.00'}
-        </span>
-      </div>
-    </div>
-    
-    {/* Filters Section */}
-    <div className="p-4 bg-gray-50 border-b">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Salesperson Filter */}
+  const renderTable = (data, type) => (
+    <div className="bg-white rounded-lg shadow border">
+      <div className="px-6 py-4 border-b flex justify-between items-center">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
-          <select
-            value={filters.salesperson}
-            onChange={(e) => setFilters({...filters, salesperson: e.target.value})}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Salespersons</option>
-            {filterOptions.salespersons.map((salesperson, index) => (
-              <option key={index} value={salesperson}>{salesperson}</option>
-            ))}
-          </select>
+          <h3 className="text-lg font-semibold capitalize">{type} Orders</h3>
+          <p className="text-gray-600 text-sm">Orders with {type} status</p>
         </div>
-        
-        {/* Customer Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-          <select
-            value={filters.customer}
-            onChange={(e) => setFilters({...filters, customer: e.target.value})}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Customers</option>
-            {filterOptions.customers.map((customer, index) => (
-              <option key={index} value={customer}>{customer}</option>
-            ))}
-          </select>
-        </div>
-        
-        {/* Item Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
-          <select
-            value={filters.item}
-            onChange={(e) => setFilters({...filters, item: e.target.value})}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Items</option>
-            {filterOptions.items.map((item, index) => (
-              <option key={index} value={item}>{item}</option>
-            ))}
-          </select>
-        </div>
-        
-        {/* Search Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-          <input
-            type="text"
-            value={filters.search}
-            onChange={(e) => setFilters({...filters, search: e.target.value})}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Search orders..."
-          />
+        <div className="px-3 py-2">
+          <span className="text-gray-700 font-medium">Total Balance Qty: </span>
+          <span className="text-gray-800 font-bold">
+            {typeof balanceTotals[type] === 'number' ? balanceTotals[type].toFixed(2) : '0.00'}
+          </span>
         </div>
       </div>
-      
-      {/* Clear Filters Button */}
-      {(filters.salesperson || filters.customer || filters.item || filters.search) && (
-        <div className="mt-3">
-          <button
-            onClick={() => setFilters({
-              status: 'all',
-              salesperson: '',
-              customer: '',
-              item: '',
-              search: ''
-            })}
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            Clear all filters
-          </button>
+
+      {/* Filters Section */}
+      <div className="p-4 bg-gray-50 border-b">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Salesperson Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
+            <select
+              value={filters.salesperson}
+              onChange={(e) => setFilters({ ...filters, salesperson: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Salespersons</option>
+              {filterOptions.salespersons.map((salesperson, index) => (
+                <option key={index} value={salesperson}>{salesperson}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Customer Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+            <select
+              value={filters.customer}
+              onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Customers</option>
+              {filterOptions.customers.map((customer, index) => (
+                <option key={index} value={customer}>{customer}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Item Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Item</label>
+            <select
+              value={filters.item}
+              onChange={(e) => setFilters({ ...filters, item: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Items</option>
+              {filterOptions.items.map((item, index) => (
+                <option key={index} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Search orders..."
+            />
+          </div>
         </div>
-      )}
-    </div>
-    
-    <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b sticky top-0 z-10">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VR No</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-            {type === "pending" && (
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {filterOrders(data).length > 0 ? (
-            filterOrders(data).map((order) => (
-              <tr key={order.id} className="hover:bg-gray-50">
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.salesperson}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.customerName}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.vrno}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.date}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.itemName}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{order.remarks}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.priority}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.rate}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {typeof order.balanceQty === 'number' ? order.balanceQty.toFixed(2) : order.balanceQty}
-                </td>
-                <td className="px-4 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    type === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    type === 'complete' ? 'bg-green-100 text-green-800' :
-                    type === 'cancel' ? 'bg-red-100 text-red-800' :
-                    type === 'partial' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {order.status}
-                  </span>
-                </td>
-                {type === "pending" && (
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => handleProcessOrder(order)}
-                      className="bg-blue-600 text-white px-3 py-1 text-xs rounded hover:bg-blue-700 transition-colors"
-                    >
-                      Process
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))
-          ) : (
+
+        {/* Clear Filters Button */}
+        {(filters.salesperson || filters.customer || filters.item || filters.search) && (
+          <div className="mt-3">
+            <button
+              onClick={() => setFilters({
+                status: 'all',
+                salesperson: '',
+                customer: '',
+                item: '',
+                search: ''
+              })}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-x-auto" style={{ maxHeight: '380px', overflowY: 'auto' }}>
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b sticky top-0 z-10">
             <tr>
-              <td colSpan={type === "pending" ? 11 : 10} className="px-6 py-8 text-center text-gray-500">
-                No {type} orders found matching your filters
-              </td>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VR No</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance Qty</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              {type === "pending" && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+              )}
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {filterOrders(data).length > 0 ? (
+              filterOrders(data).map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.salesperson}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.customerName}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.vrno}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.date}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.itemName}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{order.remarks}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.priority}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{order.rate}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {typeof order.balanceQty === 'number' ? order.balanceQty.toFixed(2) : order.balanceQty}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${type === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        type === 'complete' ? 'bg-green-100 text-green-800' :
+                          type === 'cancel' ? 'bg-red-100 text-red-800' :
+                            type === 'partial' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                      }`}>
+                      {order.status}
+                    </span>
+                  </td>
+                  {type === "pending" && (
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleProcessOrder(order)}
+                        className="bg-blue-600 text-white px-3 py-1 text-xs rounded hover:bg-blue-700 transition-colors"
+                      >
+                        Process
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={type === "pending" ? 11 : 10} className="px-6 py-8 text-center text-gray-500">
+                  No {type} orders found matching your filters
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
-)
+  )
 
   return (
     <div className="space-y-6">
@@ -623,41 +649,37 @@ const renderTable = (data, type) => (
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab("pending")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "pending"
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "pending"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+                }`}
             >
               Pending ({pendingOrders.length})
             </button>
             <button
               onClick={() => setActiveTab("partial")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "partial"
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "partial"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+                }`}
             >
               Partial ({partialOrders.length})
             </button>
             <button
               onClick={() => setActiveTab("complete")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "complete"
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "complete"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+                }`}
             >
               Complete ({completeOrders.length})
             </button>
             <button
               onClick={() => setActiveTab("cancel")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "cancel"
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === "cancel"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+                }`}
             >
               Cancel ({cancelOrders.length})
             </button>
@@ -693,7 +715,7 @@ const renderTable = (data, type) => (
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -713,18 +735,33 @@ const renderTable = (data, type) => (
 
               {formData.arrangeLogistic === 'Yes' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.qty}
-                    onChange={(e) => handleFormChange('qty', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter quantity"
-                    min="1"
-                    disabled={submitting}
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Quantity <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.qty}
+                      onChange={(e) => handleFormChange('qty', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter quantity"
+                      min="1"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Remarks <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={formData.remarks}
+                      onChange={(e) => handleFormChange('remarks', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      rows="3"
+                      placeholder="Enter remarks explaining why logistics cannot be arranged"
+                      disabled={submitting}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -775,9 +812,9 @@ const renderTable = (data, type) => (
       )}
 
       {/* Modal for History Follow-Up */}
-       {showHistoryModal && (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <div>
@@ -794,8 +831,8 @@ const renderTable = (data, type) => (
                 </button>
               </div>
             </div>
-            
-            {/* Filters */}
+
+            {/* Filters - same as before */}
             <div className="p-4 border-b border-gray-200 bg-gray-50">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -810,7 +847,7 @@ const renderTable = (data, type) => (
                     <option value="not_arranged">Logistics Not Arranged</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                   <input
@@ -821,7 +858,7 @@ const renderTable = (data, type) => (
                     placeholder="Search by VR No or Remarks"
                   />
                 </div>
-                
+
                 <div className="flex items-end">
                   <button
                     onClick={applyFilters}
@@ -832,8 +869,8 @@ const renderTable = (data, type) => (
                 </div>
               </div>
             </div>
-            
-            {/* History Table */}
+
+            {/* Updated History Table with new columns */}
             <div className="overflow-auto flex-grow" style={{ overflowY: 'auto' }}>
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0">
@@ -843,6 +880,9 @@ const renderTable = (data, type) => (
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrange Logistic</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesperson</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -852,21 +892,23 @@ const renderTable = (data, type) => (
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.timestamp}</td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.vrno}</td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            item.arrangeLogistic === 'Yes' 
-                              ? 'bg-green-100 text-green-800' 
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item.arrangeLogistic === 'Yes'
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-red-100 text-red-800'
-                          }`}>
+                            }`}>
                             {item.arrangeLogistic}
                           </span>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.qty}</td>
                         <td className="px-4 py-4 text-sm text-gray-600">{item.remarks}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.salesperson}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.customer}</td>
+                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{item.item}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                         No history data found
                       </td>
                     </tr>
