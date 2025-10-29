@@ -19,7 +19,7 @@ export function FirstWeightView() {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const scrollContainerRef = useRef(null);
 
-  const API_BASE_URL = "http://localhost:3003"; // your backend URL
+  const API_BASE_URL = "https://o2d-backend-setup.onrender.com"; // your backend URL
 
 
   // ✅ Load data when tab changes (only once per tab)
