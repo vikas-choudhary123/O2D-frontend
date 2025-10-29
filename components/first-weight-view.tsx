@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export function FirstWeightView() {
   const [pendingData, setPendingData] = useState([])
@@ -8,150 +8,217 @@ export function FirstWeightView() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('pending')
   const [customerFilter, setCustomerFilter] = useState('')
-const [searchTerm, setSearchTerm] = useState('')
-const [filteredPendingData, setFilteredPendingData] = useState([])
-const [filteredHistoryData, setFilteredHistoryData] = useState([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filteredPendingData, setFilteredPendingData] = useState([])
+  const [filteredHistoryData, setFilteredHistoryData] = useState([])
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzl1EP1Vc6C5hB4DyOpmxraeUc0Ar4mAw567VOKlaBk0qwdFxyB37cgiGNiKYXww7/exec"
-  const SHEET_NAME = "FMS"
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [hasMorePending, setHasMorePending] = useState(true);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const scrollContainerRef = useRef(null);
 
+  const API_BASE_URL = "http://localhost:3003"; // your backend URL
+
+
+  // ✅ Load data when tab changes (only once per tab)
   useEffect(() => {
-    fetchSheetData()
-  }, []) 
+    const loadInitial = async () => {
+      setLoading(true);
+      if (activeTab === "pending" && pendingData.length === 0) {
+        await fetchSheetData(1, 1);
+      } else if (activeTab === "history" && historyData.length === 0) {
+        await fetchSheetData(1, 1);
+      }
+      setInitialLoadDone(true);
+      setLoading(false);
+    };
+    loadInitial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
-  useEffect(() => {
-  // Filter pending data
-  let pendingResult = [...pendingData]
+
+
+  // ✅ Filter logic
+useEffect(() => {
+  let pendingResult = [...pendingData];
   if (customerFilter) {
-    pendingResult = pendingResult.filter(item => item.customerName === customerFilter)
+    pendingResult = pendingResult.filter(item => item.customerName === customerFilter);
   }
   if (searchTerm) {
-    const term = searchTerm.toLowerCase()
-    pendingResult = pendingResult.filter(item => 
+    const term = searchTerm.toLowerCase();
+    pendingResult = pendingResult.filter(item =>
       item.orderNumber.toLowerCase().includes(term) ||
       item.gateEntryNumber.toLowerCase().includes(term) ||
       item.customerName.toLowerCase().includes(term) ||
       item.truckNumber.toLowerCase().includes(term)
-    )
+    );
   }
-  setFilteredPendingData(pendingResult)
+  setFilteredPendingData(pendingResult);
 
-  // Filter history data
-  let historyResult = [...historyData]
+  let historyResult = [...historyData];
   if (customerFilter) {
-    historyResult = historyResult.filter(item => item.customerName === customerFilter)
+    historyResult = historyResult.filter(item => item.customerName === customerFilter);
   }
   if (searchTerm) {
-    const term = searchTerm.toLowerCase()
-    historyResult = historyResult.filter(item => 
+    const term = searchTerm.toLowerCase();
+    historyResult = historyResult.filter(item =>
       item.orderNumber.toLowerCase().includes(term) ||
       item.gateEntryNumber.toLowerCase().includes(term) ||
       item.customerName.toLowerCase().includes(term) ||
       item.truckNumber.toLowerCase().includes(term) ||
-      item.wbSlipNo.toLowerCase().includes(term)
-    )
+      item.wbSlipNo?.toLowerCase().includes(term)
+    );
   }
-  setFilteredHistoryData(historyResult)
-}, [pendingData, historyData, customerFilter, searchTerm])
+  setFilteredHistoryData(historyResult);
+}, [pendingData, historyData, customerFilter, searchTerm]);
 
-  const formatDateTime = (dateString: string) => {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false, // 24-hour format
-  }).replace(",", ""); // removes extra comma
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).replace(",", "");
+  };
+
+
+  // ✅ Fetch per-tab data only
+const fetchSheetData = async (pagePending = pendingPage, pageHistory = historyPage) => {
+  try {
+    setError(null);
+
+    if (activeTab === "pending") {
+      const url = `${API_BASE_URL}/first-weight/pending?page=${pagePending}&limit=50${
+        customerFilter ? `&customer=${encodeURIComponent(customerFilter)}` : ""
+      }`;
+      const res = await fetch(url);
+      const result = await res.json();
+
+      if (result.success && Array.isArray(result.data)) {
+        const pending = result.data.map(item => ({
+          orderNumber: item.ORDER_VRNO || "",
+          gateEntryNumber: item.VRNO || "",
+          customerName: item.PARTY_NAME || "",
+          truckNumber: item.TRUCKNO || "",
+          driverName: item.DRIVER_NAME || "",
+          driverMobile: item.DRIVER_MOBILE || "",
+          driverLicense: item.DRIVER_DRIVING_LICENSE || "",
+          planned2: item.PLANNED_TIMESTAMP
+            ? new Date(item.PLANNED_TIMESTAMP).toLocaleString("en-GB")
+            : "",
+        }));
+
+        if (pagePending === 1) setPendingData(pending);
+        else setPendingData(prev => [...prev, ...pending]);
+
+        setHasMorePending(pending.length === 50);
+      }
+    }
+
+    if (activeTab === "history") {
+      const url = `${API_BASE_URL}/first-weight/history?page=${pageHistory}&limit=50${
+        customerFilter ? `&customer=${encodeURIComponent(customerFilter)}` : ""
+      }`;
+      const res = await fetch(url);
+      const result = await res.json();
+
+      if (result.success && Array.isArray(result.data)) {
+        const history = result.data.map(item => ({
+          orderNumber: item.ORDER_VRNO || "",
+          gateEntryNumber: item.VRNO || "",
+          customerName: item.PARTY_NAME || "",
+          truckNumber: item.TRUCKNO || "",
+          wbSlipNo: item.WSLIP_NO || "",
+          actualTimestamp: item.ACTUAL_TIMESTAMP
+            ? new Date(item.ACTUAL_TIMESTAMP).toLocaleString("en-GB")
+            : "",
+          planned2: item.PLANNED_TIMESTAMP
+            ? new Date(item.PLANNED_TIMESTAMP).toLocaleString("en-GB")
+            : "",
+        }));
+
+        if (pageHistory === 1) setHistoryData(history);
+        else setHistoryData(prev => [...prev, ...history]);
+
+        setHasMoreHistory(history.length === 50);
+      }
+    }
+  } catch (err) {
+    setError("Error fetching data: " + err.message);
+  } finally {
+    setLoading(false);
+  }
 };
 
 
-  const fetchSheetData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch(`${APPS_SCRIPT_URL}?sheet=${SHEET_NAME}&action=fetch`)
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const pending = []
-        const history = []
-        
-        // Start from row 7 (index 6) and process each row
-        for (let i = 6; i < result.data.length; i++) {
-          const row = result.data[i]
-          
-          // Extract data from columns B, C, D, E, F, G, I (indices 1, 2, 3, 4, 5, 6, 8)
-          const orderNumber = row[1] || ""
-          const gateEntryNumber = row[2] || ""
-          const customerName = row[3] || ""
-          const truckNumber = row[4] || ""
-          const columnF = row[5] || ""
-          const columnG = row[6] || ""
-          const wbSlipNo = row[8] || ""
-          const planned2 = formatDateTime(row[5]) || ""
-          
-          // Only process rows that have at least some data
-          if (orderNumber || gateEntryNumber || customerName || truckNumber) {
-            const entry = {
-              orderNumber: orderNumber.toString(),
-              gateEntryNumber: gateEntryNumber.toString(),
-              customerName: customerName.toString(),
-              truckNumber: truckNumber.toString(),
-              wbSlipNo: wbSlipNo.toString(),
-              planned2: planned2
-            }
-            
-            // Pending condition: column F is not null and column G is null
-            if (columnF && columnF.toString().trim() !== "" && (!columnG || columnG.toString().trim() === "")) {
-              pending.push(entry)
-            }
-            // History condition: both column F and column G are not null
-            else if (columnF && columnF.toString().trim() !== "" && columnG && columnG.toString().trim() !== "") {
-              history.push(entry)
-            }
-          }
-        }
-        
-        setPendingData(pending)
-setHistoryData(history)
-setFilteredPendingData(pending)
-setFilteredHistoryData(history)
-      } else {
-        setError(result.error || "Failed to fetch data")
-      }
-    } catch (err) {
-      setError("Error fetching data: " + err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  if (loading) {
+  // ✅ Infinite scroll handler
+useEffect(() => {
+  const container = scrollContainerRef.current;
+  if (!container) return;
+
+  const handleScroll = () => {
+    const bottom =
+      container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
+
+    if (!initialLoadDone || loading) return;
+
+    if (bottom) {
+      if (activeTab === "pending" && hasMorePending) {
+        const nextPage = pendingPage + 1;
+        setPendingPage(nextPage);
+        fetchSheetData(nextPage, historyPage);
+      } else if (activeTab === "history" && hasMoreHistory) {
+        const nextPage = historyPage + 1;
+        setHistoryPage(nextPage);
+        fetchSheetData(pendingPage, nextPage);
+      }
+    }
+  };
+
+  container.addEventListener("scroll", handleScroll);
+  return () => container.removeEventListener("scroll", handleScroll);
+}, [
+  activeTab,
+  hasMorePending,
+  hasMoreHistory,
+  loading,
+  initialLoadDone,
+  pendingPage,
+  historyPage,
+]);
+
+
+
+
+
+
+  if (loading && !initialLoadDone) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">First Weight</h2>
           <p className="text-gray-600">Vehicle weighing before loading</p>
         </div>
-        
         <div className="bg-white rounded-lg shadow border">
           <div className="px-6 py-4 border-b">
             <h3 className="text-lg font-semibold">Loading Data</h3>
-            <p className="text-gray-600 text-sm">Fetching data from Google Sheets...</p>
+            <p className="text-gray-600 text-sm">Fetching data...</p>
           </div>
-          <div className="px-6 py-8">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            </div>
+          <div className="px-6 py-8 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -161,26 +228,22 @@ setFilteredHistoryData(history)
           <h2 className="text-3xl font-bold tracking-tight">First Weight</h2>
           <p className="text-gray-600">Vehicle weighing before loading</p>
         </div>
-        
         <div className="bg-white rounded-lg shadow border">
           <div className="px-6 py-4 border-b">
             <h3 className="text-lg font-semibold">Error Loading Data</h3>
-            <p className="text-gray-600 text-sm">Unable to fetch data from Google Sheets</p>
           </div>
-          <div className="px-6 py-8">
-            <div className="text-center">
-              <p className="text-red-500 mb-4">Error: {error}</p>
-              <button 
-                onClick={fetchSheetData}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                Retry
-              </button>
-            </div>
+          <div className="px-6 py-8 text-center">
+            <p className="text-red-500 mb-4">Error: {error}</p>
+            <button
+              onClick={() => fetchSheetData(1, 1)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Retry
+            </button>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -275,7 +338,12 @@ setFilteredHistoryData(history)
               <h3 className="text-lg font-semibold">Pending First Weight</h3>
               <p className="text-gray-600 text-sm">Vehicles waiting for first weighing</p>
             </div>
-            <div className="overflow-x-auto mobile-card-view" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+            <div
+  ref={scrollContainerRef}
+  className="overflow-x-auto mobile-card-view"
+  style={{ maxHeight: '350px', overflowY: 'auto' }}
+>
+
   {/* Desktop Table View */}
   <table className="w-full hidden md:table">
     <thead className="bg-gray-50 border-b">
@@ -352,7 +420,12 @@ setFilteredHistoryData(history)
               <h3 className="text-lg font-semibold">First Weight History</h3>
               <p className="text-gray-600 text-sm">Completed first weighing records</p>
             </div>
-            <div className="overflow-x-auto mobile-card-view" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+            <div
+  ref={scrollContainerRef}
+  className="overflow-x-auto mobile-card-view"
+  style={{ maxHeight: '350px', overflowY: 'auto' }}
+>
+
   {/* Desktop Table View */}
   <table className="w-full hidden md:table">
     <thead className="bg-gray-50 border-b">
