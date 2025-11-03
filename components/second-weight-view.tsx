@@ -8,6 +8,8 @@ export function SecondWeightView() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('pending')
 
+  const API_BASE_URL = "https://o2d-backend-2.onrender.com"; // your backend URL
+
     // ✅ Reset pagination and fetch fresh data when filters change
   useEffect(() => {
     if (initialLoadDone) {

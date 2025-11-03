@@ -8,8 +8,8 @@ export function GenerateInvoiceView() {
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('pending')
 
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzl1EP1Vc6C5hB4DyOpmxraeUc0Ar4mAw567VOKlaBk0qwdFxyB37cgiGNiKYXww7/exec"
-  const SHEET_NAME = "FMS"
+  const API_BASE_URL = "https://o2d-backend-2.onrender.com"; // your backend URL
+
 
 useEffect(() => {
     if (initialLoadDone) {

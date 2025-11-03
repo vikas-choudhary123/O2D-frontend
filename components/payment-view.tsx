@@ -24,6 +24,9 @@ export function PaymentView() {
 
     const [sortOrder, setSortOrder] = useState('none')
 
+  const API_BASE_URL = "https://o2d-backend-2.onrender.com"; // your backend URL
+
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
