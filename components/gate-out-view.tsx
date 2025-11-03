@@ -10,8 +10,7 @@ export function GateOutView() {
 
   const API_BASE_URL = "https://o2d-backend-2.onrender.com"; // your backend URL
 
-  // ✅ Fetch all unique customers on component mount
-  useEffect(() => {
+useEffect(() => {
     fetchAllCustomers();
   }, []);
 
