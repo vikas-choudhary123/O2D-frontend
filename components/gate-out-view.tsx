@@ -11,131 +11,282 @@ export function GateOutView() {
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxGzl1EP1Vc6C5hB4DyOpmxraeUc0Ar4mAw567VOKlaBk0qwdFxyB37cgiGNiKYXww7/exec"
   const SHEET_NAME = "FMS"
 
+  // ✅ Fetch all unique customers on component mount
   useEffect(() => {
-    fetchSheetData()
-  }, [])
+    fetchAllCustomers();
+  }, []);
 
-  const formatDateTime = (dateString: string) => {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false, // 24-hour format
-  }).replace(",", ""); // removes extra comma
-};
-
-  const fetchSheetData = async () => {
+  // ✅ Fetch all unique customers from database
+  const fetchAllCustomers = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      const response = await fetch(`${API_BASE_URL}/gate-out/customers`);
+      const result = await response.json();
+      if (result.success && Array.isArray(result.data)) {
+        setAllCustomers(result.data.filter(name => name).sort());
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+    }
+  };
+
+  // ✅ Reset pagination and fetch fresh data when filters change
+  useEffect(() => {
+    if (initialLoadDone) {
+      setPendingPage(1);
+      setHistoryPage(1);
+      setPendingData([]);
+      setHistoryData([]);
+      setHasMorePending(true);
+      setHasMoreHistory(true);
+      fetchData(1, 1, true);
+    }
+  }, [customerFilter, searchTerm, activeTab]);
+
+  // ✅ Load data when tab changes
+  useEffect(() => {
+    const loadInitial = async () => {
+      setLoading(true);
+      setPendingPage(1);
+      setHistoryPage(1);
+      setPendingData([]);
+      setHistoryData([]);
+      setHasMorePending(true);
+      setHasMoreHistory(true);
       
-      const response = await fetch(`${APPS_SCRIPT_URL}?sheet=${SHEET_NAME}&action=fetch`)
-      const result = await response.json()
-      
-      if (result.success && result.data) {
-        const pending = []
-        const history = []
-        
-        // Start from row 7 (index 6) and process each row
-        for (let i = 6; i < result.data.length; i++) {
-          const row = result.data[i]
-          
-          // Extract data from all required columns
-          const orderNumber = row[1] || ""        // Column B
-          const gateEntryNumber = row[2] || ""    // Column C
-          const customerName = row[3] || ""       // Column D
-          const truckNumber = row[4] || ""        // Column E
-          const wbSlipNo = row[8] || ""          // Column I
-          const supervisorName = row[12] || ""    // Column M
-          const finalWeight = row[16] || ""      // Column Q
-          const invoiceNumber = row[21] || ""    // Column U
-          const invoiceDate = row[22] || ""      // Column V
-          const brokerName = row[23] || ""       // Column W
-          const salesPerson = row[24] || ""      // Column X
-          const loadedTruckNumber = row[26] || "" // Column Y
-          const itemName = row[27] || ""         // Column Z
-          const quantity = row[28] || ""         // Column AA
-          const amount = row[29] || ""           // Column AB
-          const state = row[30] || ""            // Column AC
-          const columnAF = row[31] || ""         // Column AF
-          const columnAG = row[32] || ""         // Column AG
-          const gateOutTime = row[32] || ""      // Column AH
-          const planned6 = formatDateTime(row[31]) || ""
-          
-          // Only process rows that have at least some data
-          if (orderNumber || gateEntryNumber || customerName || truckNumber) {
-            const entry = {
-              orderNumber: orderNumber.toString(),
-              gateEntryNumber: gateEntryNumber.toString(),
-              customerName: customerName.toString(),
-              truckNumber: truckNumber.toString(),
-              wbSlipNo: wbSlipNo.toString(),
-              supervisorName: supervisorName.toString(),
-              finalWeight: finalWeight.toString(),
-              invoiceNumber: invoiceNumber.toString(),
-              invoiceDate: invoiceDate.toString(),
-              brokerName: brokerName.toString(),
-              salesPerson: salesPerson.toString(),
-              loadedTruckNumber: loadedTruckNumber.toString(),
-              itemName: itemName.toString(),
-              quantity: quantity.toString(),
-              amount: amount.toString(),
-              state: state.toString(),
-              gateOutTime: gateOutTime.toString(),
-              planned6: planned6,
-              status: "Completed",
-              rowIndex: i + 1 // Store actual row number for updates
-            }
-            
-            // Pending condition: column AF is not null and column AG is null
-            if (columnAF && columnAF.toString().trim() !== "" && (!columnAG || columnAG.toString().trim() === "")) {
-              pending.push(entry)
-            }
-            // History condition: both column AF and column AG are not null
-            else if (columnAF && columnAF.toString().trim() !== "" && columnAG && columnAG.toString().trim() !== "") {
-              history.push(entry)
-            }
-          }
+      await fetchData(1, 1, true);
+      setInitialLoadDone(true);
+      setLoading(false);
+    };
+    loadInitial();
+  }, [activeTab]);
+
+  // ✅ Infinite scroll handler
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const bottom =
+        container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
+
+      if (!initialLoadDone || loading) return;
+
+      if (bottom) {
+        if (activeTab === "pending" && hasMorePending) {
+          const nextPage = pendingPage + 1;
+          setPendingPage(nextPage);
+          fetchData(nextPage, historyPage, false);
+        } else if (activeTab === "history" && hasMoreHistory) {
+          const nextPage = historyPage + 1;
+          setHistoryPage(nextPage);
+          fetchData(pendingPage, nextPage, false);
         }
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [
+    activeTab,
+    hasMorePending,
+    hasMoreHistory,
+    loading,
+    initialLoadDone,
+    pendingPage,
+    historyPage,
+  ]);
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).replace(",", "");
+    } catch (error) {
+      return dateString || "";
+    }
+  };
+
+  // ✅ Fetch data with filters applied at database level
+  const fetchData = async (pagePending = pendingPage, pageHistory = historyPage, resetData = false) => {
+    try {
+      setError(null);
+      setLoading(true);
+
+      if (activeTab === "pending") {
+        // Build query parameters for filtering
+        const params = new URLSearchParams({
+          page: pagePending.toString(),
+          limit: '50'
+        });
         
-        setPendingData(pending)
-        setHistoryData(history)
-      } else {
-        setError(result.error || "Failed to fetch data")
+        if (customerFilter) {
+          params.append('customer', customerFilter);
+        }
+        if (searchTerm) {
+          params.append('search', searchTerm);
+        }
+
+        const url = `${API_BASE_URL}/gate-out/pending?${params.toString()}`;
+        console.log('Fetching pending data from:', url); // Debug log
+        
+        const res = await fetch(url);
+        
+        const contentType = res.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          const text = await res.text();
+          throw new Error(`Server returned ${contentType} instead of JSON. Response: ${text.substring(0, 200)}`);
+        }
+
+        const result = await res.json();
+        console.log('Pending API response:', result); // Debug log
+
+        if (result.success && Array.isArray(result.data)) {
+          const pending = result.data.map(item => ({
+            orderNumber: item.ORDER_VRNO || "",
+            gateEntryNumber: item.VRNO || "",
+            customerName: item.PARTYNAME || "",
+            truckNumber: item.TRUCKNO || "",
+            wbSlipNo: "", // Not available in pending data
+            supervisorName: "", // Not available in Oracle query
+            finalWeight: "", // Not available in pending data
+            invoiceNumber: item.INVOICENO || "",
+            invoiceDate: "", // Not available in pending data
+            brokerName: "", // Not available in Oracle query
+            salesPerson: "", // Not available in Oracle query
+            loadedTruckNumber: item.TRUCKNO || "", // Using same truck number
+            itemName: "", // Not available in Oracle query
+            quantity: "", // Not available in Oracle query
+            amount: "", // Not available in Oracle query
+            state: "", // Not available in Oracle query
+            gateOutTime: "", // Not available in pending data
+            status: "Pending",
+            plannedTimestamp: item.PLANNEDTIMESTAMP || "",
+            vRDate: item.VRDATE || "",
+            plannedFormatted: item.PLANNEDTIMESTAMP
+              ? formatDateTime(item.PLANNEDTIMESTAMP)
+              : "",
+            vRDateFormatted: item.VRDATE
+              ? formatDateTime(item.VRDATE)
+              : "",
+          }));
+
+          if (resetData || pagePending === 1) {
+            setPendingData(pending);
+          } else {
+            setPendingData(prev => [...prev, ...pending]);
+          }
+
+          setHasMorePending(pending.length === 50);
+        } else {
+          throw new Error(result.error || 'Failed to fetch pending gate out data');
+        }
+      }
+
+      if (activeTab === "history") {
+        // Build query parameters for filtering
+        const params = new URLSearchParams({
+          page: pageHistory.toString(),
+          limit: '50'
+        });
+        
+        if (customerFilter) {
+          params.append('customer', customerFilter);
+        }
+        if (searchTerm) {
+          params.append('search', searchTerm);
+        }
+
+        const url = `${API_BASE_URL}/gate-out/history?${params.toString()}`;
+        console.log('Fetching history data from:', url); // Debug log
+        
+        const res = await fetch(url);
+        
+        const contentType = res.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          const text = await res.text();
+          throw new Error(`Server returned ${contentType} instead of JSON. Response: ${text.substring(0, 200)}`);
+        }
+
+        const result = await res.json();
+        console.log('History API response:', result); // Debug log
+
+        if (result.success && Array.isArray(result.data)) {
+          const history = result.data.map(item => ({
+            orderNumber: item.ORDER_VRNO || "",
+            gateEntryNumber: item.VRNO || "",
+            customerName: item.PARTYNAME || "",
+            truckNumber: item.TRUCKNO || "",
+            wbSlipNo: item.WSLIP_NO || "",
+            supervisorName: "", // Not available in Oracle query
+            finalWeight: "", // Not available in history data
+            invoiceNumber: item.REF1_VRNO || "",
+            invoiceDate: "", // Not available in history data
+            brokerName: "", // Not available in Oracle query
+            salesPerson: "", // Not available in Oracle query
+            loadedTruckNumber: item.TRUCKNO || "", // Using same truck number
+            itemName: "", // Not available in Oracle query
+            quantity: "", // Not available in Oracle query
+            amount: "", // Not available in Oracle query
+            state: "", // Not available in Oracle query
+            gateOutTime: item.OUTDATE || "",
+            status: "Completed",
+            outDate: item.OUTDATE || "",
+            outDateFormatted: item.OUTDATE
+              ? formatDateTime(item.OUTDATE)
+              : "",
+          }));
+
+          if (resetData || pageHistory === 1) {
+            setHistoryData(history);
+          } else {
+            setHistoryData(prev => [...prev, ...history]);
+          }
+
+          setHasMoreHistory(history.length === 50);
+        } else {
+          throw new Error(result.error || 'Failed to fetch gate out history data');
+        }
       }
     } catch (err) {
-      setError("Error fetching data: " + err.message)
+      setError("Error fetching data: " + err.message);
+      console.error('Fetch error:', err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  if (loading) {
+  // Clear filters function
+  const clearFilters = () => {
+    setCustomerFilter('');
+    setSearchTerm('');
+  };
+
+  if (loading && !initialLoadDone) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Gate Out Entry</h2>
           <p className="text-gray-600">Vehicle exit records</p>
         </div>
-        
         <div className="bg-white rounded-lg shadow border">
           <div className="px-6 py-4 border-b">
             <h3 className="text-lg font-semibold">Loading Data</h3>
-            <p className="text-gray-600 text-sm">Fetching data from Google Sheets...</p>
+            <p className="text-gray-600 text-sm">Fetching data...</p>
           </div>
-          <div className="px-6 py-8">
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            </div>
+          <div className="px-6 py-8 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -145,26 +296,22 @@ export function GateOutView() {
           <h2 className="text-3xl font-bold tracking-tight">Gate Out Entry</h2>
           <p className="text-gray-600">Vehicle exit records</p>
         </div>
-        
         <div className="bg-white rounded-lg shadow border">
           <div className="px-6 py-4 border-b">
             <h3 className="text-lg font-semibold">Error Loading Data</h3>
-            <p className="text-gray-600 text-sm">Unable to fetch data from Google Sheets</p>
           </div>
-          <div className="px-6 py-8">
-            <div className="text-center">
-              <p className="text-red-500 mb-4">Error: {error}</p>
-              <button 
-                onClick={fetchSheetData}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                Retry
-              </button>
-            </div>
+          <div className="px-6 py-8 text-center">
+            <p className="text-red-500 mb-4">Error: {error}</p>
+            <button
+              onClick={() => fetchData(1, 1, true)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Retry
+            </button>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -175,6 +322,54 @@ export function GateOutView() {
       </div>
 
       <div className="space-y-4">
+        {/* Filter Controls */}
+        <div className="bg-white p-4 rounded-lg shadow border mb-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="w-full sm:w-auto">
+              <label htmlFor="customer-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by Customer
+              </label>
+              <select
+                id="customer-filter"
+                value={customerFilter}
+                onChange={(e) => setCustomerFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">All Customers</option>
+                {allCustomers.map((name, index) => (
+                  <option key={index} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="w-full sm:flex-1">
+              <label htmlFor="search-filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Search
+              </label>
+              <input
+                id="search-filter"
+                type="text"
+                placeholder="Search by order number, gate entry, customer, truck number, invoice number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Rest of the component remains the same */}
         {/* Tab Navigation */}
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
@@ -206,79 +401,110 @@ export function GateOutView() {
           <div className="bg-white rounded-lg shadow border">
             <div className="px-6 py-4 border-b">
               <h3 className="text-lg font-semibold">Pending Gate Out</h3>
-              <p className="text-gray-600 text-sm">Vehicles ready to exit</p>
+              <p className="text-gray-600 text-sm">
+                {customerFilter ? `Filtered by: ${customerFilter}` : searchTerm ? `Search results for: "${searchTerm}"` : 'Vehicles ready to exit'}
+                {customerFilter || searchTerm ? ` (${pendingData.length} records)` : ''}
+              </p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div
+              ref={scrollContainerRef}
+              className="overflow-x-auto mobile-card-view"
+              style={{ maxHeight: '350px', overflowY: 'auto' }}
+            >
+              <table className="w-full hidden md:table">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Planned</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Planned Time</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WB Slip No</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supervisor Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Weight</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Broker Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales Person</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loaded Truck Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entry Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
+                  {loading && hasMorePending && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-4 text-center">
+                        <div className="flex justify-center items-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                          <span className="ml-2 text-gray-600">Loading more data...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {pendingData.length > 0 ? (
                     pendingData.map((entry, index) => (
-                      <tr key={entry.gateEntryNumber || index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{entry.planned6}</td>
+                      <tr key={`${entry.gateEntryNumber}-${index}`} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.plannedFormatted}</td>
                         <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{entry.orderNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateEntryNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.customerName}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.truckNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                            {entry.wbSlipNo}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.supervisorName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                            {entry.finalWeight}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
                             {entry.invoiceNumber}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.invoiceDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.brokerName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.salesPerson}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.loadedTruckNumber}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.itemName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                            {entry.quantity}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-green-600">{entry.amount}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.state}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.vRDateFormatted}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={16} className="px-6 py-8 text-center text-gray-500">
-                        No pending records found
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                        {customerFilter || searchTerm ? 'No records found for current filters' : 'No pending records found'}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+
+              {/* Mobile Card View remains the same */}
+              <div className="md:hidden">
+                {pendingData.length > 0 ? (
+                  pendingData.map((entry, index) => (
+                    <div key={`${entry.gateEntryNumber}-${index}`} className="mobile-card">
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Planned Time:</span>
+                        <span className="mobile-card-value">{entry.plannedFormatted}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Order Number:</span>
+                        <span className="mobile-card-value">{entry.orderNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Gate Entry:</span>
+                        <span className="mobile-card-value">{entry.gateEntryNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Customer:</span>
+                        <span className="mobile-card-value">{entry.customerName}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Truck Number:</span>
+                        <span className="mobile-card-value">{entry.truckNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Invoice Number:</span>
+                        <span className="mobile-card-value">
+                          <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                            {entry.invoiceNumber}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Entry Date:</span>
+                        <span className="mobile-card-value">{entry.vRDateFormatted}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-6 py-8 text-center text-gray-500">
+                    {customerFilter || searchTerm ? 'No records found for current filters' : 'No pending records found'}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -288,36 +514,43 @@ export function GateOutView() {
           <div className="bg-white rounded-lg shadow border">
             <div className="px-6 py-4 border-b">
               <h3 className="text-lg font-semibold">Gate Out History</h3>
-              <p className="text-gray-600 text-sm">Vehicles that have exited</p>
+              <p className="text-gray-600 text-sm">
+                {customerFilter ? `Filtered by: ${customerFilter}` : searchTerm ? `Search results for: "${searchTerm}"` : 'Vehicles that have exited'}
+                {customerFilter || searchTerm ? ` (${historyData.length} records)` : ''}
+              </p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div
+              ref={scrollContainerRef}
+              className="overflow-x-auto mobile-card-view"
+              style={{ maxHeight: '350px', overflowY: 'auto' }}
+            >
+              <table className="w-full hidden md:table">
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Entry</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Truck Number</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WB Slip No</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supervisor Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Weight</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Broker Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales Person</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loaded Truck Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gate Out Time</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
+                  {loading && hasMoreHistory && (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center">
+                        <div className="flex justify-center items-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                          <span className="ml-2 text-gray-600">Loading more data...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {historyData.length > 0 ? (
                     historyData.map((entry, index) => (
-                      <tr key={entry.gateEntryNumber || index} className="hover:bg-gray-50">
+                      <tr key={`${entry.gateEntryNumber}-${index}`} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{entry.orderNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateEntryNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.customerName}</td>
@@ -327,30 +560,12 @@ export function GateOutView() {
                             {entry.wbSlipNo}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.supervisorName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                            {entry.finalWeight}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
                             {entry.invoiceNumber}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.invoiceDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.brokerName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.salesPerson}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.loadedTruckNumber}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.itemName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                            {entry.quantity}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-green-600">{entry.amount}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.state}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.gateOutTime}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900">{entry.outDateFormatted}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
                             {entry.status}
@@ -360,13 +575,71 @@ export function GateOutView() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={18} className="px-6 py-8 text-center text-gray-500">
-                        No history records found
+                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                        {customerFilter || searchTerm ? 'No records found for current filters' : 'No history records found'}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+
+              {/* Mobile Card View remains the same */}
+              <div className="md:hidden">
+                {historyData.length > 0 ? (
+                  historyData.map((entry, index) => (
+                    <div key={`${entry.gateEntryNumber}-${index}`} className="mobile-card">
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Order Number:</span>
+                        <span className="mobile-card-value">{entry.orderNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Gate Entry:</span>
+                        <span className="mobile-card-value">{entry.gateEntryNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Customer:</span>
+                        <span className="mobile-card-value">{entry.customerName}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Truck Number:</span>
+                        <span className="mobile-card-value">{entry.truckNumber}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">WB Slip No:</span>
+                        <span className="mobile-card-value">
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                            {entry.wbSlipNo}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Invoice Number:</span>
+                        <span className="mobile-card-value">
+                          <span className="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                            {entry.invoiceNumber}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Gate Out Time:</span>
+                        <span className="mobile-card-value">{entry.outDateFormatted}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Status:</span>
+                        <span className="mobile-card-value">
+                          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                            {entry.status}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-6 py-8 text-center text-gray-500">
+                    {customerFilter || searchTerm ? 'No records found for current filters' : 'No history records found'}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
